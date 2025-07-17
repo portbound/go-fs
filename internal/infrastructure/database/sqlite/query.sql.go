@@ -14,27 +14,29 @@ import (
 
 const create = `-- name: Create :exec
 INSERT INTO files (
-	id, name, owner, type, size, unit, upload_date, storage_path
+	id, name, original_name, owner, type, size, unit, upload_date, storage_path
 ) VALUES (
-	?, ?, ?, ?, ?, ?, ?, ? 
+	?, ?, ?, ?, ?, ?, ?, ?, ?
 )
 `
 
 type CreateParams struct {
-	ID          uuid.UUID `json:"id"`
-	Name        string    `json:"name"`
-	Owner       string    `json:"owner"`
-	Type        string    `json:"type"`
-	Size        float64   `json:"size"`
-	Unit        string    `json:"unit"`
-	UploadDate  string    `json:"upload_date"`
-	StoragePath string    `json:"storage_path"`
+	ID           uuid.UUID `json:"id"`
+	Name         string    `json:"name"`
+	OriginalName string    `json:"original_name"`
+	Owner        string    `json:"owner"`
+	Type         string    `json:"type"`
+	Size         int64     `json:"size"`
+	Unit         string    `json:"unit"`
+	UploadDate   string    `json:"upload_date"`
+	StoragePath  string    `json:"storage_path"`
 }
 
 func (q *Queries) Create(ctx context.Context, arg CreateParams) error {
 	_, err := q.exec(ctx, q.createStmt, create,
 		arg.ID,
 		arg.Name,
+		arg.OriginalName,
 		arg.Owner,
 		arg.Type,
 		arg.Size,
@@ -56,7 +58,7 @@ func (q *Queries) Delete(ctx context.Context, id uuid.UUID) error {
 }
 
 const get = `-- name: Get :one
-SELECT id, name, owner, type, size, unit, upload_date, modified_date, storage_path FROM files 
+SELECT id, name, original_name, owner, type, size, unit, upload_date, modified_date, storage_path FROM files 
 WHERE id = ? LIMIT 1
 `
 
@@ -66,6 +68,7 @@ func (q *Queries) Get(ctx context.Context, id uuid.UUID) (File, error) {
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
+		&i.OriginalName,
 		&i.Owner,
 		&i.Type,
 		&i.Size,
@@ -78,7 +81,7 @@ func (q *Queries) Get(ctx context.Context, id uuid.UUID) (File, error) {
 }
 
 const getAll = `-- name: GetAll :many
-SELECT id, name, owner, type, size, unit, upload_date, modified_date, storage_path FROM files 
+SELECT id, name, original_name, owner, type, size, unit, upload_date, modified_date, storage_path FROM files 
 ORDER BY upload_date
 `
 
@@ -94,6 +97,7 @@ func (q *Queries) GetAll(ctx context.Context) ([]File, error) {
 		if err := rows.Scan(
 			&i.ID,
 			&i.Name,
+			&i.OriginalName,
 			&i.Owner,
 			&i.Type,
 			&i.Size,
@@ -124,7 +128,7 @@ WHERE id = ?
 type UpdateParams struct {
 	Name         string         `json:"name"`
 	Type         string         `json:"type"`
-	Size         float64        `json:"size"`
+	Size         int64          `json:"size"`
 	Unit         string         `json:"unit"`
 	ModifiedDate sql.NullString `json:"modified_date"`
 	StoragePath  string         `json:"storage_path"`

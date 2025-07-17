@@ -13,9 +13,10 @@ import (
 type File struct {
 	ID           uuid.UUID      `json:"id"`
 	Name         string         `json:"name"`
+	OriginalName string         `json:"original_name"`
 	Owner        string         `json:"owner"`
 	Type         string         `json:"type"`
-	Size         float64        `json:"size"`
+	Size         int64          `json:"size"`
 	Unit         string         `json:"unit"`
 	UploadDate   string         `json:"upload_date"`
 	ModifiedDate sql.NullString `json:"modified_date"`

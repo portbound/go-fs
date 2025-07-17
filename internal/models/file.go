@@ -9,9 +9,10 @@ import (
 type File struct {
 	ID           uuid.UUID `json:"id"`
 	Name         string    `json:"name"`
+	OriginalName string    `json:"original-name"`
 	Owner        string    `json:"owner"`
 	Type         string    `json:"type"`
-	Size         int       `json:"size"`
+	Size         int64     `json:"size"`
 	Unit         string    `json:"unit"`
 	UploadDate   time.Time `json:"upload-date"`
 	ModifiedDate time.Time `json:"modified-date"`
