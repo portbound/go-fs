@@ -42,7 +42,7 @@ func NewDB(connStr string) (*DB, error) {
 	return &DB{db: db, Queries: queries}, nil
 }
 
-func mapToFile(f File) (*models.File, error) {
+func mapToFile(f File) (*models.FileMetadata, error) {
 	uploadDate, err := time.Parse(time.RFC3339, f.UploadDate)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse upload date: %w", err)
@@ -57,34 +57,32 @@ func mapToFile(f File) (*models.File, error) {
 		}
 	}
 
-	return &models.File{
+	return &models.FileMetadata{
 		ID:           f.ID,
-		Name:         f.Filename,
-		OriginalName: f.OriginalFilename,
+		Name:         f.Name,
 		Owner:        f.Owner,
 		Type:         f.ContentType,
-		Size:         f.Filesize,
+		Size:         f.Size,
 		UploadDate:   uploadDate,
 		ModifiedDate: modifiedDate,
 		StoragePath:  f.StoragePath,
 	}, nil
 }
 
-func (db *DB) Create(ctx context.Context, file *models.File) error {
+func (db *DB) Create(ctx context.Context, file *models.FileMetadata) error {
 	params := CreateParams{
-		ID:               file.ID,
-		Filename:         file.Name,
-		OriginalFilename: file.OriginalName,
-		Owner:            file.Owner,
-		ContentType:      file.Type,
-		Filesize:         file.Size,
-		UploadDate:       file.UploadDate.Format(time.RFC3339),
-		StoragePath:      file.StoragePath,
+		ID:          file.ID,
+		Name:        file.Name,
+		Owner:       file.Owner,
+		ContentType: file.Type,
+		Size:        file.Size,
+		UploadDate:  file.UploadDate.Format(time.RFC3339),
+		StoragePath: file.StoragePath,
 	}
 	return db.Queries.Create(ctx, params)
 }
 
-func (db *DB) Get(ctx context.Context, id uuid.UUID) (*models.File, error) {
+func (db *DB) Get(ctx context.Context, id uuid.UUID) (*models.FileMetadata, error) {
 	file, err := db.Queries.Get(ctx, id)
 	if err != nil {
 		return nil, err
@@ -92,13 +90,13 @@ func (db *DB) Get(ctx context.Context, id uuid.UUID) (*models.File, error) {
 	return mapToFile(file)
 }
 
-func (db *DB) GetAll(ctx context.Context) ([]*models.File, error) {
+func (db *DB) GetAll(ctx context.Context) ([]*models.FileMetadata, error) {
 	data, err := db.Queries.GetAll(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	var files []*models.File
+	var files []*models.FileMetadata
 	for _, row := range data {
 		file, err := mapToFile(row)
 		if err != nil {
@@ -109,11 +107,11 @@ func (db *DB) GetAll(ctx context.Context) ([]*models.File, error) {
 	return files, nil
 }
 
-func (db *DB) Update(ctx context.Context, id uuid.UUID, file *models.File) error {
+func (db *DB) Update(ctx context.Context, id uuid.UUID, file *models.FileMetadata) error {
 	params := UpdateParams{
-		ID:       file.ID,
-		Filename: file.Name,
-		Filesize: file.Size,
+		ID:   file.ID,
+		Name: file.Name,
+		Size: file.Size,
 		ModifiedDate: sql.NullString{
 			String: time.Now().UTC().Format(time.RFC3339),
 			Valid:  true,
