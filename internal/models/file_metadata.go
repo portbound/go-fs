@@ -6,10 +6,9 @@ import (
 	"github.com/google/uuid"
 )
 
-type File struct {
+type FileMetadata struct {
 	ID           uuid.UUID `json:"id"`
 	Name         string    `json:"name"`
-	OriginalName string    `json:"original-name"`
 	Owner        string    `json:"owner"`
 	Type         string    `json:"type"`
 	Size         int64     `json:"size"`
