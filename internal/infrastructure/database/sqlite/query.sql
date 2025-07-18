@@ -1,8 +1,8 @@
 -- name: Create :exec
 INSERT INTO files (
-	id, name, original_name, owner, type, size, unit, upload_date, storage_path
+	id, filename, original_filename, owner, content_type, filesize, upload_date, storage_path
 ) VALUES (
-	?, ?, ?, ?, ?, ?, ?, ?, ?
+	?, ?, ?, ?, ?, ?, ?, ?
 );
 	 
 -- name: Get :one
@@ -15,7 +15,7 @@ ORDER BY upload_date;
 
 -- name: Update :exec
 UPDATE files 
-set name = ?, type = ?, size = ?, unit = ?, modified_date = ?, storage_path = ?
+set filename = ?, filesize = ?, modified_date = ?, storage_path = ?
 WHERE id = ?;
 
 -- name: Delete :exec

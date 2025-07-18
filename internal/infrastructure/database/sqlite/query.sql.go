@@ -14,33 +14,31 @@ import (
 
 const create = `-- name: Create :exec
 INSERT INTO files (
-	id, name, original_name, owner, type, size, unit, upload_date, storage_path
+	id, filename, original_filename, owner, content_type, filesize, upload_date, storage_path
 ) VALUES (
-	?, ?, ?, ?, ?, ?, ?, ?, ?
+	?, ?, ?, ?, ?, ?, ?, ?
 )
 `
 
 type CreateParams struct {
-	ID           uuid.UUID `json:"id"`
-	Name         string    `json:"name"`
-	OriginalName string    `json:"original_name"`
-	Owner        string    `json:"owner"`
-	Type         string    `json:"type"`
-	Size         int64     `json:"size"`
-	Unit         string    `json:"unit"`
-	UploadDate   string    `json:"upload_date"`
-	StoragePath  string    `json:"storage_path"`
+	ID               uuid.UUID `json:"id"`
+	Filename         string    `json:"filename"`
+	OriginalFilename string    `json:"original_filename"`
+	Owner            string    `json:"owner"`
+	ContentType      string    `json:"content_type"`
+	Filesize         int64     `json:"filesize"`
+	UploadDate       string    `json:"upload_date"`
+	StoragePath      string    `json:"storage_path"`
 }
 
 func (q *Queries) Create(ctx context.Context, arg CreateParams) error {
 	_, err := q.exec(ctx, q.createStmt, create,
 		arg.ID,
-		arg.Name,
-		arg.OriginalName,
+		arg.Filename,
+		arg.OriginalFilename,
 		arg.Owner,
-		arg.Type,
-		arg.Size,
-		arg.Unit,
+		arg.ContentType,
+		arg.Filesize,
 		arg.UploadDate,
 		arg.StoragePath,
 	)
@@ -58,7 +56,7 @@ func (q *Queries) Delete(ctx context.Context, id uuid.UUID) error {
 }
 
 const get = `-- name: Get :one
-SELECT id, name, original_name, owner, type, size, unit, upload_date, modified_date, storage_path FROM files 
+SELECT id, filename, original_filename, owner, content_type, filesize, upload_date, modified_date, storage_path FROM files 
 WHERE id = ? LIMIT 1
 `
 
@@ -67,12 +65,11 @@ func (q *Queries) Get(ctx context.Context, id uuid.UUID) (File, error) {
 	var i File
 	err := row.Scan(
 		&i.ID,
-		&i.Name,
-		&i.OriginalName,
+		&i.Filename,
+		&i.OriginalFilename,
 		&i.Owner,
-		&i.Type,
-		&i.Size,
-		&i.Unit,
+		&i.ContentType,
+		&i.Filesize,
 		&i.UploadDate,
 		&i.ModifiedDate,
 		&i.StoragePath,
@@ -81,7 +78,7 @@ func (q *Queries) Get(ctx context.Context, id uuid.UUID) (File, error) {
 }
 
 const getAll = `-- name: GetAll :many
-SELECT id, name, original_name, owner, type, size, unit, upload_date, modified_date, storage_path FROM files 
+SELECT id, filename, original_filename, owner, content_type, filesize, upload_date, modified_date, storage_path FROM files 
 ORDER BY upload_date
 `
 
@@ -96,12 +93,11 @@ func (q *Queries) GetAll(ctx context.Context) ([]File, error) {
 		var i File
 		if err := rows.Scan(
 			&i.ID,
-			&i.Name,
-			&i.OriginalName,
+			&i.Filename,
+			&i.OriginalFilename,
 			&i.Owner,
-			&i.Type,
-			&i.Size,
-			&i.Unit,
+			&i.ContentType,
+			&i.Filesize,
 			&i.UploadDate,
 			&i.ModifiedDate,
 			&i.StoragePath,
@@ -121,15 +117,13 @@ func (q *Queries) GetAll(ctx context.Context) ([]File, error) {
 
 const update = `-- name: Update :exec
 UPDATE files 
-set name = ?, type = ?, size = ?, unit = ?, modified_date = ?, storage_path = ?
+set filename = ?, filesize = ?, modified_date = ?, storage_path = ?
 WHERE id = ?
 `
 
 type UpdateParams struct {
-	Name         string         `json:"name"`
-	Type         string         `json:"type"`
-	Size         int64          `json:"size"`
-	Unit         string         `json:"unit"`
+	Filename     string         `json:"filename"`
+	Filesize     int64          `json:"filesize"`
 	ModifiedDate sql.NullString `json:"modified_date"`
 	StoragePath  string         `json:"storage_path"`
 	ID           uuid.UUID      `json:"id"`
@@ -137,10 +131,8 @@ type UpdateParams struct {
 
 func (q *Queries) Update(ctx context.Context, arg UpdateParams) error {
 	_, err := q.exec(ctx, q.updateStmt, update,
-		arg.Name,
-		arg.Type,
-		arg.Size,
-		arg.Unit,
+		arg.Filename,
+		arg.Filesize,
 		arg.ModifiedDate,
 		arg.StoragePath,
 		arg.ID,

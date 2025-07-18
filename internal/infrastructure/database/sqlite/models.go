@@ -11,14 +11,13 @@ import (
 )
 
 type File struct {
-	ID           uuid.UUID      `json:"id"`
-	Name         string         `json:"name"`
-	OriginalName string         `json:"original_name"`
-	Owner        string         `json:"owner"`
-	Type         string         `json:"type"`
-	Size         int64          `json:"size"`
-	Unit         string         `json:"unit"`
-	UploadDate   string         `json:"upload_date"`
-	ModifiedDate sql.NullString `json:"modified_date"`
-	StoragePath  string         `json:"storage_path"`
+	ID               uuid.UUID      `json:"id"`
+	Filename         string         `json:"filename"`
+	OriginalFilename string         `json:"original_filename"`
+	Owner            string         `json:"owner"`
+	ContentType      string         `json:"content_type"`
+	Filesize         int64          `json:"filesize"`
+	UploadDate       string         `json:"upload_date"`
+	ModifiedDate     sql.NullString `json:"modified_date"`
+	StoragePath      string         `json:"storage_path"`
 }

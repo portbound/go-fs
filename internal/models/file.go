@@ -13,7 +13,6 @@ type File struct {
 	Owner        string    `json:"owner"`
 	Type         string    `json:"type"`
 	Size         int64     `json:"size"`
-	Unit         string    `json:"unit"`
 	UploadDate   time.Time `json:"upload-date"`
 	ModifiedDate time.Time `json:"modified-date"`
 	StoragePath  string    `json:"path"`
