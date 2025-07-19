@@ -9,45 +9,47 @@ import (
 	"github.com/portbound/go-fs/internal/models"
 	"github.com/portbound/go-fs/internal/repositories"
 	"github.com/portbound/go-fs/internal/services"
+	"golang.org/x/net/context"
 )
 
-func TestFileService_UploadFile(t *testing.T) {
+func TestFileService_StageFileToDisk(t *testing.T) {
 	tests := []struct {
-		name     string
-		repo     repositories.FileRepository
-		r        io.Reader
-		metadata *models.FileMetadata
-		wantErr  bool
+		name             string
+		repo             repositories.FileRepository
+		localStoragePath string
+		ctx              context.Context
+		metadata         *models.FileMeta
+		mp               io.Reader
+		wantErr          bool
 	}{
 		{
-			name: "passing",
-			metadata: &models.FileMetadata{
-				Name:  "test.txt",
-				Type:  "text/polain",
+			name:             "passing",
+			localStoragePath: t.TempDir(),
+			ctx:              t.Context(),
+			metadata: &models.FileMeta{
+				Name:  "test",
 				Owner: "test",
+				Type:  "text/plain",
 			},
+			mp:      nil,
 			wantErr: false,
 		},
 	}
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			fs := services.NewFileService(tt.repo, tt.localStoragePath)
 			repo, buf := setup(t)
 			tt.repo = repo
-			tt.r = buf
-			testLocalStoragePath := t.TempDir()
-			fs := services.NewFileService(tt.repo, testLocalStoragePath)
-
-			gotErr := fs.UploadFile(tt.r, tt.metadata)
+			tt.mp = buf
+			gotErr := fs.StageFileToDisk(tt.ctx, tt.metadata, tt.mp)
 			if gotErr != nil {
 				if !tt.wantErr {
-					t.Errorf("UploadFile() failed: %v", gotErr)
+					t.Errorf("StageFileToDisk() failed: %v", gotErr)
 				}
 				return
 			}
-
 			if tt.wantErr {
-				t.Fatal("UploadFile() succeeded unexpectedly")
+				t.Fatal("StageFileToDisk() succeeded unexpectedly")
 			}
 		})
 	}
@@ -55,6 +57,7 @@ func TestFileService_UploadFile(t *testing.T) {
 
 func setup(t *testing.T) (repositories.FileRepository, *bytes.Buffer) {
 	t.Helper()
+
 	repo, err := sqlite.NewDB("file::memory:?cache=shared")
 	if err != nil {
 		t.Fatalf("failed to init sqlite instance: %v", err)
@@ -63,7 +66,7 @@ func setup(t *testing.T) (repositories.FileRepository, *bytes.Buffer) {
 	buf := new(bytes.Buffer)
 	_, err = buf.WriteString("hello, world!")
 	if err != nil {
-		t.Fatalf("failed to write buffer: %v", err)
+		t.Fatalf("failed to write to buffer: %v", err)
 	}
 
 	return repo, buf

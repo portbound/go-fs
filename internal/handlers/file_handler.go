@@ -1,12 +1,10 @@
 package handlers
 
 import (
-	"bytes"
 	"io"
 	"mime"
 	"mime/multipart"
 	"net/http"
-	"strings"
 
 	"github.com/portbound/go-fs/internal/models"
 	"github.com/portbound/go-fs/internal/services"
@@ -35,29 +33,7 @@ func (h *FileHandler) handleFileUpload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	reader := multipart.NewReader(r.Body, params["boundary"])
-	metadata := models.FileMetadata{}
-
-	buf, err := parseMPR(reader, &metadata)
-	if err != nil {
-		WriteJSONError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	if err := h.fileService.UploadFile(buf, &metadata); err != nil {
-		WriteJSONError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	WriteJSON(w, http.StatusCreated, metadata)
-}
-
-func (h *FileHandler) handleGetFile(w http.ResponseWriter, r *http.Request)     {}
-func (h *FileHandler) handleGetAllFiles(w http.ResponseWriter, r *http.Request) {}
-func (h *FileHandler) handleDeleteFile(w http.ResponseWriter, r *http.Request)  {}
-
-func parseMPR(reader *multipart.Reader, metadata *models.FileMetadata) (*bytes.Buffer, error) {
-	buf := new(bytes.Buffer)
-	fields := make(map[string]string)
+	allFileMeta := []*models.FileMeta{}
 
 	for {
 		mp, err := reader.NextPart()
@@ -65,32 +41,27 @@ func parseMPR(reader *multipart.Reader, metadata *models.FileMetadata) (*bytes.B
 			if err == io.EOF {
 				break
 			}
-			return nil, err
+			WriteJSONError(w, http.StatusInternalServerError, err.Error())
+			return
 		}
 
 		if mp.FileName() != "" {
-			_, err = io.Copy(buf, mp)
-			if err != nil {
-				return nil, err
-			}
-			metadata.Name = mp.FileName()
-			metadata.Type = mp.Header.Get("Content-Type")
-		} else {
-			fieldName := strings.ToLower(mp.FormName())
-			if fieldName == "" {
-				continue
+			metadata := models.FileMeta{
+				Name: mp.FileName(),
+				Type: mp.Header.Get("Content-Type"),
 			}
 
-			fieldValue, err := io.ReadAll(mp)
+			err := h.fileService.StageFileToDisk(r.Context(), &metadata, mp)
 			if err != nil {
-				return nil, err
+				WriteJSONError(w, http.StatusInternalServerError, err.Error())
+				return
 			}
-
-			fields[fieldName] = string(fieldValue)
+			allFileMeta = append(allFileMeta, &metadata)
 		}
-
-		metadata.Owner = fields["owner"]
 	}
-
-	return buf, nil
+	WriteJSON(w, http.StatusCreated, allFileMeta)
 }
+
+func (h *FileHandler) handleGetFile(w http.ResponseWriter, r *http.Request)     {}
+func (h *FileHandler) handleGetAllFiles(w http.ResponseWriter, r *http.Request) {}
+func (h *FileHandler) handleDeleteFile(w http.ResponseWriter, r *http.Request)  {}

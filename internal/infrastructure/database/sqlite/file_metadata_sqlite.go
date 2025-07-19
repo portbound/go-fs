@@ -42,7 +42,7 @@ func NewDB(connStr string) (*DB, error) {
 	return &DB{db: db, Queries: queries}, nil
 }
 
-func (db *DB) Create(ctx context.Context, file *models.FileMetadata) error {
+func (db *DB) Create(ctx context.Context, file *models.FileMeta) error {
 	params := CreateParams{
 		ID:          file.ID,
 		Name:        file.Name,
@@ -55,7 +55,7 @@ func (db *DB) Create(ctx context.Context, file *models.FileMetadata) error {
 	return db.Queries.Create(ctx, params)
 }
 
-func (db *DB) Get(ctx context.Context, id uuid.UUID) (*models.FileMetadata, error) {
+func (db *DB) Get(ctx context.Context, id uuid.UUID) (*models.FileMeta, error) {
 	file, err := db.Queries.Get(ctx, id)
 	if err != nil {
 		return nil, err
@@ -63,13 +63,13 @@ func (db *DB) Get(ctx context.Context, id uuid.UUID) (*models.FileMetadata, erro
 	return mapToFile(file)
 }
 
-func (db *DB) GetAll(ctx context.Context) ([]*models.FileMetadata, error) {
+func (db *DB) GetAll(ctx context.Context) ([]*models.FileMeta, error) {
 	data, err := db.Queries.GetAll(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	var files []*models.FileMetadata
+	var files []*models.FileMeta
 	for _, row := range data {
 		file, err := mapToFile(row)
 		if err != nil {
@@ -84,13 +84,13 @@ func (db *DB) Delete(ctx context.Context, id uuid.UUID) error {
 	return db.Queries.Delete(ctx, id)
 }
 
-func mapToFile(f File) (*models.FileMetadata, error) {
+func mapToFile(f File) (*models.FileMeta, error) {
 	uploadDate, err := time.Parse(time.RFC3339, f.UploadDate)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse upload date: %w", err)
 	}
 
-	return &models.FileMetadata{
+	return &models.FileMeta{
 		ID:          f.ID,
 		Name:        f.Name,
 		Owner:       f.Owner,
