@@ -6,7 +6,7 @@ import (
 	"mime"
 	"mime/multipart"
 	"net/http"
-	"time"
+	"strings"
 
 	"github.com/portbound/go-fs/internal/models"
 	"github.com/portbound/go-fs/internal/services"
@@ -34,10 +34,29 @@ func (h *FileHandler) handleFileUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO: extract to private function
 	reader := multipart.NewReader(r.Body, params["boundary"])
-	buf := new(bytes.Buffer)
 	metadata := models.FileMetadata{}
+
+	buf, err := parseMPR(reader, &metadata)
+	if err != nil {
+		WriteJSONError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	if err := h.fileService.UploadFile(buf, &metadata); err != nil {
+		WriteJSONError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	WriteJSON(w, http.StatusCreated, metadata)
+}
+
+func (h *FileHandler) handleGetFile(w http.ResponseWriter, r *http.Request)     {}
+func (h *FileHandler) handleGetAllFiles(w http.ResponseWriter, r *http.Request) {}
+func (h *FileHandler) handleDeleteFile(w http.ResponseWriter, r *http.Request)  {}
+
+func parseMPR(reader *multipart.Reader, metadata *models.FileMetadata) (*bytes.Buffer, error) {
+	buf := new(bytes.Buffer)
 	fields := make(map[string]string)
 
 	for {
@@ -46,43 +65,32 @@ func (h *FileHandler) handleFileUpload(w http.ResponseWriter, r *http.Request) {
 			if err == io.EOF {
 				break
 			}
-			WriteJSONError(w, http.StatusInternalServerError, err.Error())
-			return
+			return nil, err
 		}
 
 		if mp.FileName() != "" {
 			_, err = io.Copy(buf, mp)
 			if err != nil {
+				return nil, err
 			}
 			metadata.Name = mp.FileName()
 			metadata.Type = mp.Header.Get("Content-Type")
 		} else {
-			fieldName := mp.FormName()
+			fieldName := strings.ToLower(mp.FormName())
 			if fieldName == "" {
 				continue
 			}
 
 			fieldValue, err := io.ReadAll(mp)
 			if err != nil {
-				WriteJSONError(w, http.StatusInternalServerError, err.Error())
-				return
+				return nil, err
 			}
 
 			fields[fieldName] = string(fieldValue)
 		}
+
+		metadata.Owner = fields["owner"]
 	}
 
-	// TODO: make sure we verify that the metadata is complete,
-	metadata.Owner = fields["owner"]
-	metadata.UploadDate = time.Now()
-	if err := h.fileService.UploadFile(buf, &metadata); err != nil {
-		WriteJSONError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	// TODO: Delete file after pushing to cloud?
-	WriteJSON(w, http.StatusCreated, metadata)
+	return buf, nil
 }
-func (h *FileHandler) handleGetFile(w http.ResponseWriter, r *http.Request)     {}
-func (h *FileHandler) handleGetAllFiles(w http.ResponseWriter, r *http.Request) {}
-func (h *FileHandler) handleDeleteFile(w http.ResponseWriter, r *http.Request)  {}
