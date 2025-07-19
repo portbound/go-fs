@@ -8,9 +8,10 @@ import (
 )
 
 type Config struct {
-	ServerPort  string
-	DatabaseURL string
-	DatabaseENG string
+	ServerPort       string
+	DatabaseURL      string
+	DatabaseENG      string
+	LocalStoragePath string
 }
 
 func Load() (*Config, error) {
@@ -20,9 +21,10 @@ func Load() (*Config, error) {
 	}
 
 	cfg := Config{
-		ServerPort:  os.Getenv("SERVER_PORT"),
-		DatabaseURL: os.Getenv("DATABASE_URL"),
-		DatabaseENG: os.Getenv("DATABASE_ENG"),
+		ServerPort:       os.Getenv("SERVER_PORT"),
+		DatabaseURL:      os.Getenv("DATABASE_URL"),
+		DatabaseENG:      os.Getenv("DATABASE_ENG"),
+		LocalStoragePath: os.Getenv("LOCAL_STORAGE_PATH"),
 	}
 
 	if cfg.DatabaseURL == "" {

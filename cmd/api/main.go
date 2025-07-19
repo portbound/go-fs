@@ -23,7 +23,7 @@ func main() {
 		log.Fatalf("failed to create repository: %v", err)
 	}
 
-	fileService := services.NewFileService(fileRepo)
+	fileService := services.NewFileService(fileRepo, cfg.LocalStoragePath)
 	fileHandler := handlers.NewFileHandler(fileService)
 
 	mux := http.NewServeMux()

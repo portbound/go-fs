@@ -12,26 +12,16 @@ import (
 )
 
 type FileService struct {
-	repo repositories.FileRepository
+	repo             repositories.FileRepository
+	localStoragePath string
 }
 
-func NewFileService(repo repositories.FileRepository) *FileService {
-	return &FileService{repo: repo}
+func NewFileService(repo repositories.FileRepository, localStoragePath string) *FileService {
+	return &FileService{repo: repo, localStoragePath: localStoragePath}
 }
 
 func (fs *FileService) UploadFile(r io.Reader, metadata *models.FileMetadata) error {
-	cwd, err := os.Getwd()
-	if err != nil {
-		return fmt.Errorf("failed to get cwd: %w", err)
-	}
 
-	tmpStorage := filepath.Join(cwd, "tmp")
-	if err := os.MkdirAll(tmpStorage, 0755); err != nil {
-		return fmt.Errorf("failed to create tmp storage dir: %w", err)
-	}
-
-	filename := fmt.Sprintf("%s-%s", uuid.New().String(), metadata.Name)
-	tmpPath := filepath.Join(tmpStorage, filename)
 
 	outFile, err := os.Create(tmpPath)
 	if err != nil {
