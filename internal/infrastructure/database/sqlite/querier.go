@@ -15,7 +15,6 @@ type Querier interface {
 	Delete(ctx context.Context, id uuid.UUID) error
 	Get(ctx context.Context, id uuid.UUID) (File, error)
 	GetAll(ctx context.Context) ([]File, error)
-	Update(ctx context.Context, arg UpdateParams) error
 }
 
 var _ Querier = (*Queries)(nil)

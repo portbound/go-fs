@@ -7,7 +7,6 @@ package sqlite
 
 import (
 	"context"
-	"database/sql"
 
 	"github.com/google/uuid"
 )
@@ -54,7 +53,7 @@ func (q *Queries) Delete(ctx context.Context, id uuid.UUID) error {
 }
 
 const get = `-- name: Get :one
-SELECT id, name, owner, content_type, size, upload_date, modified_date, storage_path FROM files 
+SELECT id, name, owner, content_type, size, upload_date, storage_path FROM files 
 WHERE id = ? LIMIT 1
 `
 
@@ -68,14 +67,13 @@ func (q *Queries) Get(ctx context.Context, id uuid.UUID) (File, error) {
 		&i.ContentType,
 		&i.Size,
 		&i.UploadDate,
-		&i.ModifiedDate,
 		&i.StoragePath,
 	)
 	return i, err
 }
 
 const getAll = `-- name: GetAll :many
-SELECT id, name, owner, content_type, size, upload_date, modified_date, storage_path FROM files 
+SELECT id, name, owner, content_type, size, upload_date, storage_path FROM files 
 ORDER BY upload_date
 `
 
@@ -95,7 +93,6 @@ func (q *Queries) GetAll(ctx context.Context) ([]File, error) {
 			&i.ContentType,
 			&i.Size,
 			&i.UploadDate,
-			&i.ModifiedDate,
 			&i.StoragePath,
 		); err != nil {
 			return nil, err
@@ -109,29 +106,4 @@ func (q *Queries) GetAll(ctx context.Context) ([]File, error) {
 		return nil, err
 	}
 	return items, nil
-}
-
-const update = `-- name: Update :exec
-UPDATE files 
-set name = ?, size = ?, modified_date = ?, storage_path = ?
-WHERE id = ?
-`
-
-type UpdateParams struct {
-	Name         string         `json:"name"`
-	Size         int64          `json:"size"`
-	ModifiedDate sql.NullString `json:"modified_date"`
-	StoragePath  string         `json:"storage_path"`
-	ID           uuid.UUID      `json:"id"`
-}
-
-func (q *Queries) Update(ctx context.Context, arg UpdateParams) error {
-	_, err := q.exec(ctx, q.updateStmt, update,
-		arg.Name,
-		arg.Size,
-		arg.ModifiedDate,
-		arg.StoragePath,
-		arg.ID,
-	)
-	return err
 }

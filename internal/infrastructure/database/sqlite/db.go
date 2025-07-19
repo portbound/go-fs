@@ -36,9 +36,6 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.getAllStmt, err = db.PrepareContext(ctx, getAll); err != nil {
 		return nil, fmt.Errorf("error preparing query GetAll: %w", err)
 	}
-	if q.updateStmt, err = db.PrepareContext(ctx, update); err != nil {
-		return nil, fmt.Errorf("error preparing query Update: %w", err)
-	}
 	return &q, nil
 }
 
@@ -62,11 +59,6 @@ func (q *Queries) Close() error {
 	if q.getAllStmt != nil {
 		if cerr := q.getAllStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing getAllStmt: %w", cerr)
-		}
-	}
-	if q.updateStmt != nil {
-		if cerr := q.updateStmt.Close(); cerr != nil {
-			err = fmt.Errorf("error closing updateStmt: %w", cerr)
 		}
 	}
 	return err
@@ -112,7 +104,6 @@ type Queries struct {
 	deleteStmt *sql.Stmt
 	getStmt    *sql.Stmt
 	getAllStmt *sql.Stmt
-	updateStmt *sql.Stmt
 }
 
 func (q *Queries) WithTx(tx *sql.Tx) *Queries {
@@ -123,6 +114,5 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		deleteStmt: q.deleteStmt,
 		getStmt:    q.getStmt,
 		getAllStmt: q.getAllStmt,
-		updateStmt: q.updateStmt,
 	}
 }

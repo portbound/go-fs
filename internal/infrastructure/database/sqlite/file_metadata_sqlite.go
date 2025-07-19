@@ -42,33 +42,6 @@ func NewDB(connStr string) (*DB, error) {
 	return &DB{db: db, Queries: queries}, nil
 }
 
-func mapToFile(f File) (*models.FileMetadata, error) {
-	uploadDate, err := time.Parse(time.RFC3339, f.UploadDate)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse upload date: %w", err)
-	}
-
-	var modifiedDate time.Time
-
-	if f.ModifiedDate.Valid {
-		modifiedDate, err = time.Parse(time.RFC3339, f.ModifiedDate.String)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse last modified date: %w", err)
-		}
-	}
-
-	return &models.FileMetadata{
-		ID:           f.ID,
-		Name:         f.Name,
-		Owner:        f.Owner,
-		Type:         f.ContentType,
-		Size:         f.Size,
-		UploadDate:   uploadDate,
-		ModifiedDate: modifiedDate,
-		StoragePath:  f.StoragePath,
-	}, nil
-}
-
 func (db *DB) Create(ctx context.Context, file *models.FileMetadata) error {
 	params := CreateParams{
 		ID:          file.ID,
@@ -107,20 +80,23 @@ func (db *DB) GetAll(ctx context.Context) ([]*models.FileMetadata, error) {
 	return files, nil
 }
 
-func (db *DB) Update(ctx context.Context, id uuid.UUID, file *models.FileMetadata) error {
-	params := UpdateParams{
-		ID:   file.ID,
-		Name: file.Name,
-		Size: file.Size,
-		ModifiedDate: sql.NullString{
-			String: time.Now().UTC().Format(time.RFC3339),
-			Valid:  true,
-		},
-		StoragePath: file.StoragePath,
-	}
-	return db.Queries.Update(ctx, params)
-}
-
 func (db *DB) Delete(ctx context.Context, id uuid.UUID) error {
 	return db.Queries.Delete(ctx, id)
+}
+
+func mapToFile(f File) (*models.FileMetadata, error) {
+	uploadDate, err := time.Parse(time.RFC3339, f.UploadDate)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse upload date: %w", err)
+	}
+
+	return &models.FileMetadata{
+		ID:          f.ID,
+		Name:        f.Name,
+		Owner:       f.Owner,
+		Type:        f.ContentType,
+		Size:        f.Size,
+		UploadDate:  uploadDate,
+		StoragePath: f.StoragePath,
+	}, nil
 }

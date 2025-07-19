@@ -5,6 +5,5 @@ CREATE TABLE IF NOT EXISTS files (
 		content_type TEXT NOT NULL,
 		size INTEGER NOT NULL,
 		upload_date TEXT NOT NULL,
-		modified_date TEXT,
 		storage_path TEXT NOT NULL
 );

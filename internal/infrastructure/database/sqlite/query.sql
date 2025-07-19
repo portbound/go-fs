@@ -13,11 +13,6 @@ WHERE id = ? LIMIT 1;
 SELECT * FROM files 
 ORDER BY upload_date;
 
--- name: Update :exec
-UPDATE files 
-set name = ?, size = ?, modified_date = ?, storage_path = ?
-WHERE id = ?;
-
 -- name: Delete :exec
 DELETE FROM files 
 WHERE id = ?;
