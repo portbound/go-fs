@@ -5,17 +5,13 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/portbound/go-fs/internal/models"
 	"github.com/portbound/go-fs/internal/repositories"
 	"golang.org/x/net/context"
 )
-
-type copyResult struct {
-	bytes int64
-	err   error
-}
 
 type FileService struct {
 	repo             repositories.FileRepository
@@ -27,6 +23,11 @@ func NewFileService(repo repositories.FileRepository, localStoragePath string) *
 }
 
 func (fs *FileService) StageFileToDisk(ctx context.Context, metadata *models.FileMeta, reader io.Reader) error {
+	type copyResult struct {
+		bytes int64
+		err   error
+	}
+
 	tmpDir := filepath.Join(fs.localStoragePath, "tmp")
 
 	if err := os.MkdirAll(tmpDir, 0755); err != nil {
@@ -34,7 +35,7 @@ func (fs *FileService) StageFileToDisk(ctx context.Context, metadata *models.Fil
 	}
 
 	metadata.ID = uuid.New()
-	tmpFileName := fmt.Sprintf("%s-%s", metadata.ID.String(), metadata.Name)
+	tmpFileName := fmt.Sprintf("%s-%s", metadata.ID.String(), strings.ReplaceAll(metadata.Name, " ", "_"))
 	tmpFilePath := filepath.Join(tmpDir, tmpFileName)
 
 	tmpFile, err := os.Create(tmpFilePath)
@@ -43,22 +44,23 @@ func (fs *FileService) StageFileToDisk(ctx context.Context, metadata *models.Fil
 	}
 	defer tmpFile.Close()
 
-	copyChan := make(chan copyResult, 1)
+	ch := make(chan copyResult, 1)
 	go func() {
 		bytes, err := io.Copy(tmpFile, reader)
-		copyChan <- copyResult{bytes: bytes, err: err}
+		ch <- copyResult{bytes: bytes, err: err}
 	}()
 
 	select {
 	case <-ctx.Done():
 		os.Remove(tmpFilePath)
 		return ctx.Err()
-	case result := <-copyChan:
+	case result := <-ch:
 		if result.err != nil {
 			os.Remove(tmpFilePath)
 			return fmt.Errorf("failed to write to tmp file: %w", err)
 		}
 		metadata.Size = result.bytes
+		metadata.StoragePath = tmpFilePath
 	}
 
 	return nil

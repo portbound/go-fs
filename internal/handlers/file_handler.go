@@ -5,6 +5,7 @@ import (
 	"mime"
 	"mime/multipart"
 	"net/http"
+	"strings"
 
 	"github.com/portbound/go-fs/internal/models"
 	"github.com/portbound/go-fs/internal/services"
@@ -26,6 +27,11 @@ func (h *FileHandler) RegisterRoutes(mux *http.ServeMux) {
 }
 
 func (h *FileHandler) handleFileUpload(w http.ResponseWriter, r *http.Request) {
+	type result struct {
+		cloudPath string
+		err       error
+	}
+
 	_, params, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
 	if err != nil {
 		WriteJSONError(w, http.StatusBadRequest, err.Error())
@@ -34,6 +40,7 @@ func (h *FileHandler) handleFileUpload(w http.ResponseWriter, r *http.Request) {
 
 	reader := multipart.NewReader(r.Body, params["boundary"])
 	allFileMeta := []*models.FileMeta{}
+	owner := []byte{}
 
 	for {
 		mp, err := reader.NextPart()
@@ -51,14 +58,30 @@ func (h *FileHandler) handleFileUpload(w http.ResponseWriter, r *http.Request) {
 				Type: mp.Header.Get("Content-Type"),
 			}
 
-			err := h.fileService.StageFileToDisk(r.Context(), &metadata, mp)
+			if err := h.fileService.StageFileToDisk(r.Context(), &metadata, mp); err != nil {
+				WriteJSONError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+
+			allFileMeta = append(allFileMeta, &metadata)
+		}
+
+		if strings.ToLower(mp.FormName()) == "owner" {
+			owner, err = io.ReadAll(mp)
 			if err != nil {
 				WriteJSONError(w, http.StatusInternalServerError, err.Error())
 				return
 			}
-			allFileMeta = append(allFileMeta, &metadata)
 		}
+
 	}
+
+	for _, f := range allFileMeta {
+		f.Owner = string(owner)
+	}
+
+	// Upload to Cloud
+
 	WriteJSON(w, http.StatusCreated, allFileMeta)
 }
 
