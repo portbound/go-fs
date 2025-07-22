@@ -5,6 +5,7 @@ import (
 	"mime"
 	"mime/multipart"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/portbound/go-fs/internal/models"
@@ -73,11 +74,15 @@ func (h *FileHandler) handleFileUpload(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
-
 	}
 
 	for _, f := range allFileMeta {
 		f.Owner = string(owner)
+		if err := h.fileService.SaveFileMeta(r.Context(), f); err != nil {
+			os.Remove(f.TmpDir)
+			WriteJSONError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
 	}
 
 	// Upload to Cloud

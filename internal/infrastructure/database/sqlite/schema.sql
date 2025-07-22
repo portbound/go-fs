@@ -6,4 +6,4 @@ CREATE TABLE IF NOT EXISTS files (
 		size INTEGER NOT NULL,
 		upload_date TEXT NOT NULL,
 		storage_path TEXT NOT NULL
-);
+)

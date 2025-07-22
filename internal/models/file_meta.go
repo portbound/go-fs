@@ -14,4 +14,5 @@ type FileMeta struct {
 	Size        int64     `json:"size"`
 	UploadDate  time.Time `json:"upload-date"`
 	StoragePath string    `json:"path"`
+	TmpDir      string    `json:"tmp-dir"`
 }

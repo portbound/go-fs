@@ -60,8 +60,12 @@ func (fs *FileService) StageFileToDisk(ctx context.Context, metadata *models.Fil
 			return fmt.Errorf("failed to write to tmp file: %w", err)
 		}
 		metadata.Size = result.bytes
-		metadata.StoragePath = tmpFilePath
+		metadata.TmpDir = tmpFilePath
 	}
 
 	return nil
+}
+
+func (fs *FileService) SaveFileMeta(ctx context.Context, f *models.FileMeta) error {
+	return fs.repo.Create(ctx, f)
 }
