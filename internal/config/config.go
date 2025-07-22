@@ -1,7 +1,7 @@
 package config
 
 import (
-	"log"
+	"fmt"
 	"os"
 
 	"github.com/joho/godotenv"
@@ -17,7 +17,7 @@ type Config struct {
 func Load() (*Config, error) {
 	err := godotenv.Load()
 	if err != nil {
-		log.Printf("failed to load .env: %v", err)
+		return nil, err
 	}
 
 	cfg := Config{
@@ -27,8 +27,19 @@ func Load() (*Config, error) {
 		LocalStoragePath: os.Getenv("LOCAL_STORAGE_PATH"),
 	}
 
+	if cfg.ServerPort == "" {
+		return nil, fmt.Errorf("SERVER_PORT is required but was undefined")
+	}
+
 	if cfg.DatabaseURL == "" {
-		cfg.DatabaseURL = "sqlite"
+		return nil, fmt.Errorf("DATABASE_URL is required but was undefined")
+	}
+
+	if cfg.DatabaseENG == "" {
+		return nil, fmt.Errorf("DATABASE_ENG is required but was undefined")
+	}
+	if cfg.ServerPort == "" {
+		return nil, fmt.Errorf("LOCAL_STORAGE_PATH is required but was undefined")
 	}
 
 	return &cfg, nil
