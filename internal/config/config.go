@@ -12,6 +12,7 @@ type Config struct {
 	DatabaseURL      string
 	DatabaseENG      string
 	LocalStoragePath string
+	CloudKey         string
 }
 
 func Load() (*Config, error) {
@@ -38,7 +39,8 @@ func Load() (*Config, error) {
 	if cfg.DatabaseENG == "" {
 		return nil, fmt.Errorf("DATABASE_ENG is required but was undefined")
 	}
-	if cfg.ServerPort == "" {
+
+	if cfg.LocalStoragePath == "" {
 		return nil, fmt.Errorf("LOCAL_STORAGE_PATH is required but was undefined")
 	}
 

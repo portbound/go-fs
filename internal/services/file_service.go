@@ -1,3 +1,4 @@
+// Package services
 package services
 
 import (
@@ -7,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"cloud.google.com/go/storage"
 	"github.com/google/uuid"
 	"github.com/portbound/go-fs/internal/models"
 	"github.com/portbound/go-fs/internal/repositories"
@@ -16,10 +18,11 @@ import (
 type FileService struct {
 	repo             repositories.FileRepository
 	localStoragePath string
+	client           *storage.Client
 }
 
-func NewFileService(repo repositories.FileRepository, localStoragePath string) *FileService {
-	return &FileService{repo: repo, localStoragePath: localStoragePath}
+func NewFileService(repo repositories.FileRepository, localStoragePath string, client *storage.Client) *FileService {
+	return &FileService{repo: repo, localStoragePath: localStoragePath, client: client}
 }
 
 func (fs *FileService) StageFileToDisk(ctx context.Context, metadata *models.FileMeta, reader io.Reader) error {
@@ -57,12 +60,16 @@ func (fs *FileService) StageFileToDisk(ctx context.Context, metadata *models.Fil
 	case result := <-ch:
 		if result.err != nil {
 			os.Remove(tmpFilePath)
-			return fmt.Errorf("failed to write to tmp file: %w", err)
+			return fmt.Errorf("failed to write to tmp file: %w", result.err)
 		}
 		metadata.Size = result.bytes
 		metadata.TmpDir = tmpFilePath
 	}
 
+	return nil
+}
+
+func (fs *FileService) UploadToCloud(ctx context.Context, fm *models.FileMeta) error {
 	return nil
 }
 
