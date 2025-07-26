@@ -1,28 +1,26 @@
-// Package services
 package services
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
 
-	"cloud.google.com/go/storage"
 	"github.com/google/uuid"
 	"github.com/portbound/go-fs/internal/models"
 	"github.com/portbound/go-fs/internal/repositories"
-	"golang.org/x/net/context"
 )
 
 type FileService struct {
-	repo             repositories.FileRepository
+	fileRepo         repositories.FileRepository
+	storageRepo      repositories.StorageRepository
 	localStoragePath string
-	client           *storage.Client
 }
 
-func NewFileService(repo repositories.FileRepository, localStoragePath string, client *storage.Client) *FileService {
-	return &FileService{repo: repo, localStoragePath: localStoragePath, client: client}
+func NewFileService(fileRepo repositories.FileRepository, storageRepo repositories.StorageRepository, localStoragePath string) *FileService {
+	return &FileService{fileRepo: fileRepo, storageRepo: storageRepo, localStoragePath: localStoragePath}
 }
 
 func (fs *FileService) StageFileToDisk(ctx context.Context, metadata *models.FileMeta, reader io.Reader) error {
@@ -34,7 +32,7 @@ func (fs *FileService) StageFileToDisk(ctx context.Context, metadata *models.Fil
 	tmpDir := filepath.Join(fs.localStoragePath, "tmp")
 
 	if err := os.MkdirAll(tmpDir, 0755); err != nil {
-		return fmt.Errorf("failed to create tmp storage dir: %w", err)
+		return fmt.Errorf("services.NewFileService: failed to create tmp storage dir: %w", err)
 	}
 
 	metadata.ID = uuid.New()
@@ -43,7 +41,7 @@ func (fs *FileService) StageFileToDisk(ctx context.Context, metadata *models.Fil
 
 	tmpFile, err := os.Create(tmpFilePath)
 	if err != nil {
-		return fmt.Errorf("failed to create tmp file: %w", err)
+		return fmt.Errorf("services.StageFileToDisk: failed to create tmp file: %w", err)
 	}
 	defer tmpFile.Close()
 
@@ -60,7 +58,7 @@ func (fs *FileService) StageFileToDisk(ctx context.Context, metadata *models.Fil
 	case result := <-ch:
 		if result.err != nil {
 			os.Remove(tmpFilePath)
-			return fmt.Errorf("failed to write to tmp file: %w", result.err)
+			return fmt.Errorf("services.StageFileToDisk: failed to write to tmp file: %w", result.err)
 		}
 		metadata.Size = result.bytes
 		metadata.TmpDir = tmpFilePath
@@ -69,10 +67,17 @@ func (fs *FileService) StageFileToDisk(ctx context.Context, metadata *models.Fil
 	return nil
 }
 
-func (fs *FileService) UploadToCloud(ctx context.Context, fm *models.FileMeta) error {
+func (fs *FileService) UploadFile(ctx context.Context, fm *models.FileMeta) error {
+	if err := fs.storageRepo.Upload(ctx, fm); err != nil {
+		return fmt.Errorf("services.UploadFile: failed to upload file to storage: %w", err)
+	}
+
+	os.Remove(fm.TmpDir)
 	return nil
 }
 
-func (fs *FileService) SaveFileMeta(ctx context.Context, f *models.FileMeta) error {
-	return fs.repo.Create(ctx, f)
+func (fs *FileService) SaveFileMeta(ctx context.Context, fm *models.FileMeta) error {
+	if err := fs.fileRepo.Create(ctx, fm); err != nil {
+		return fmt.Errorf("services.SaveFileMeta: failed to save file metadata: %w", err)
+	}
 }

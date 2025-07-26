@@ -8,11 +8,12 @@ import (
 )
 
 type Config struct {
-	ServerPort       string
-	DatabaseURL      string
-	DatabaseENG      string
-	LocalStoragePath string
-	CloudKey         string
+	ServerPort      string
+	DatabaseURL     string
+	DatabaseENG     string
+	StorageProvider string
+	BucketName      string
+	TmpDir          string
 }
 
 func Load() (*Config, error) {
@@ -22,10 +23,12 @@ func Load() (*Config, error) {
 	}
 
 	cfg := Config{
-		ServerPort:       os.Getenv("SERVER_PORT"),
-		DatabaseURL:      os.Getenv("DATABASE_URL"),
-		DatabaseENG:      os.Getenv("DATABASE_ENG"),
-		LocalStoragePath: os.Getenv("LOCAL_STORAGE_PATH"),
+		ServerPort:      os.Getenv("SERVER_PORT"),
+		DatabaseURL:     os.Getenv("DATABASE_URL"),
+		DatabaseENG:     os.Getenv("DATABASE_ENG"),
+		StorageProvider: os.Getenv("STORAGE_PROVIDER"),
+		BucketName:      os.Getenv("BUCKET_NAME"),
+		TmpDir:          os.Getenv("TMP_DIR"),
 	}
 
 	if cfg.ServerPort == "" {
@@ -40,8 +43,16 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("DATABASE_ENG is required but was undefined")
 	}
 
-	if cfg.LocalStoragePath == "" {
-		return nil, fmt.Errorf("LOCAL_STORAGE_PATH is required but was undefined")
+	if cfg.StorageProvider == "" {
+		return nil, fmt.Errorf("STORAGE_PROVIDER is required but was undefined")
+	}
+
+	if cfg.BucketName == "" {
+		return nil, fmt.Errorf("BUCKET_NAME is required but was undefined")
+	}
+
+	if cfg.TmpDir == "" {
+		return nil, fmt.Errorf("TMP_DIR is required but was undefined")
 	}
 
 	return &cfg, nil
