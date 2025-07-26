@@ -24,17 +24,17 @@ type DB struct {
 func NewDB(connStr string) (*DB, error) {
 	db, err := sql.Open("sqlite3", connStr)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open sql connection: %w", err)
+		return nil, fmt.Errorf("sqlite.NewDB: failed to open sql connection: %w", err)
 	}
 
 	err = db.Ping()
 	if err != nil {
-		return nil, fmt.Errorf("pinged db but got no response: %w", err)
+		return nil, fmt.Errorf("sqlite.NewDB: pinged db but got no response: %w", err)
 	}
 
 	_, err = db.Exec(schema)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create table: %w", err)
+		return nil, fmt.Errorf("sqlite.NewDB: failed to create table: %w", err)
 	}
 
 	queries := New(db)
@@ -42,15 +42,15 @@ func NewDB(connStr string) (*DB, error) {
 	return &DB{db: db, Queries: queries}, nil
 }
 
-func (db *DB) Create(ctx context.Context, file *models.FileMeta) error {
+func (db *DB) Create(ctx context.Context, filemeta *models.FileMeta) error {
 	params := CreateParams{
-		ID:          file.ID,
-		Name:        file.Name,
-		Owner:       file.Owner,
-		ContentType: file.Type,
-		Size:        file.Size,
-		UploadDate:  file.UploadDate.Format(time.RFC3339),
-		StoragePath: file.StoragePath,
+		ID:          filemeta.ID,
+		Name:        filemeta.Name,
+		Owner:       filemeta.Owner,
+		ContentType: filemeta.Type,
+		Size:        filemeta.Size,
+		UploadDate:  filemeta.UploadDate.Format(time.RFC3339),
+		StoragePath: filemeta.StoragePath,
 	}
 	return db.Queries.Create(ctx, params)
 }
@@ -87,7 +87,7 @@ func (db *DB) Delete(ctx context.Context, id uuid.UUID) error {
 func mapToFile(f File) (*models.FileMeta, error) {
 	uploadDate, err := time.Parse(time.RFC3339, f.UploadDate)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse upload date: %w", err)
+		return nil, fmt.Errorf("sqlite.mapToFile: failed to parse upload date: %w", err)
 	}
 
 	return &models.FileMeta{

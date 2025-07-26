@@ -8,7 +8,7 @@ import (
 )
 
 type FileRepository interface {
-	Create(ctx context.Context, file *models.FileMeta) error
+	Create(ctx context.Context, filemeta *models.FileMeta) error
 	Get(ctx context.Context, id uuid.UUID) (*models.FileMeta, error)
 	GetAll(ctx context.Context) ([]*models.FileMeta, error)
 	Delete(ctx context.Context, id uuid.UUID) error
