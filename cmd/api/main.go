@@ -19,12 +19,12 @@ func main() {
 		log.Fatalf("failed to load config: %v", err)
 	}
 
-	fileRepo, err := createFileRepo(cfg)
+	fileRepo, err := buildFileRepo(cfg)
 	if err != nil {
 		log.Fatalf("failed to create file repository: %v", err)
 	}
 
-	storageRepo, err := createStorageRepo(cfg)
+	storageRepo, err := buildStorageRepo(cfg)
 	if err != nil {
 		log.Fatalf("failed to create storage repository: %v", err)
 	}
@@ -41,7 +41,7 @@ func main() {
 	}
 }
 
-func createFileRepo(cfg *config.Config) (repositories.FileRepository, error) {
+func buildFileRepo(cfg *config.Config) (repositories.FileRepository, error) {
 	switch cfg.DatabaseENG {
 	case "sqlite":
 		return sqlite.NewDB(cfg.DatabaseURL)
@@ -50,7 +50,7 @@ func createFileRepo(cfg *config.Config) (repositories.FileRepository, error) {
 	}
 }
 
-func createStorageRepo(cfg *config.Config) (repositories.StorageRepository, error) {
+func buildStorageRepo(cfg *config.Config) (repositories.StorageRepository, error) {
 	switch cfg.StorageProvider {
 	case "gcs":
 		return gcs.NewGCSStorage(cfg.BucketName)
