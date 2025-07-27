@@ -80,4 +80,5 @@ func (fs *FileService) SaveFileMeta(ctx context.Context, fm *models.FileMeta) er
 	if err := fs.fileRepo.Create(ctx, fm); err != nil {
 		return fmt.Errorf("services.SaveFileMeta: failed to save file metadata: %w", err)
 	}
+	return nil
 }
