@@ -13,7 +13,7 @@ import (
 	"github.com/portbound/go-fs/internal/models"
 )
 
-// go:embed schema.sql
+//go:embed schema.sql
 var schema string
 
 type DB struct {
