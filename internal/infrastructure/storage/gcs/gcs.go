@@ -44,8 +44,16 @@ func (g *GCSStorage) Upload(ctx context.Context, fm *models.FileMeta) error {
 	}
 
 	if err := wc.Close(); err != nil {
-		return fmt.Errorf("gcs.Upload: failed to close writer: %w", err)
+		return fmt.Errorf("gcs.Upload: failed to commit upload: %w", err)
 	}
+	return nil
+}
 
+func (g *GCSStorage) Delete(ctx context.Context, fm *models.FileMeta) error {
+	obj := g.client.Bucket(g.bkt).Object(fm.Name)
+
+	if err := obj.Delete(ctx); err != nil {
+		return fmt.Errorf("gcs.Delete: failed to delete file: %w", err)
+	}
 	return nil
 }

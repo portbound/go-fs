@@ -1,12 +1,11 @@
 package handlers
 
 import (
+	"fmt"
 	"io"
 	"mime"
 	"mime/multipart"
 	"net/http"
-	"strings"
-	"sync"
 
 	"github.com/portbound/go-fs/internal/models"
 	"github.com/portbound/go-fs/internal/services"
@@ -28,11 +27,6 @@ func (h *FileHandler) RegisterRoutes(mux *http.ServeMux) {
 }
 
 func (h *FileHandler) handleFileUpload(w http.ResponseWriter, r *http.Request) {
-	type result struct {
-		cloudPath string
-		err       error
-	}
-
 	_, params, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
 	if err != nil {
 		WriteJSONError(w, http.StatusBadRequest, err.Error())
@@ -40,9 +34,7 @@ func (h *FileHandler) handleFileUpload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	reader := multipart.NewReader(r.Body, params["boundary"])
-	allFileMeta := []*models.FileMeta{}
-	requestingUser := []byte{}
-
+	batch := []*models.FileMeta{}
 	for {
 		mp, err := reader.NextPart()
 		if err != nil {
@@ -64,81 +56,24 @@ func (h *FileHandler) handleFileUpload(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 
-			allFileMeta = append(allFileMeta, &metadata)
-		}
-
-		if strings.ToLower(mp.FormName()) == "owner" {
-			requestingUser, err = io.ReadAll(mp)
-			if err != nil {
-				WriteJSONError(w, http.StatusInternalServerError, err.Error())
-				return
-			}
+			batch = append(batch, &metadata)
 		}
 	}
 
-	type foo struct {
-		filename string
-		err      error
-	}
+	errs := h.fileService.ProcessBatch(r.Context(), batch)
+	if len(errs) > 0 {
+		errMsgs := []string{}
+		errMsgs = append(errMsgs, fmt.Sprintf("failed to upload %d file(s)", len(errs)))
 
-	ch := make(chan *foo)
-	wg := sync.WaitGroup{}
-	bar := []string{}
-
-	for _, fileMeta := range allFileMeta {
-		wg.Add(1)
-		fileMeta.Owner = string(requestingUser)
-		go func(fm *models.FileMeta) {
-			defer wg.Done()
-			if err := h.fileService.SaveFileMeta(r.Context(), fm); err != nil {
-				ch <- &foo{filename: fm.Name, err: err}
-				return
-			}
-
-			if err := h.fileService.UploadFile(r.Context(), fm); err != nil {
-				ch <- &foo{filename: fm.Name, err: err}
-				// Delete file meta?
-				return
-			}
-
-			// Delete local storage at fm.tmpdir
-			ch <- &foo{filename: fm.Name, err: nil}
-		}(fileMeta)
-	}
-
-	go func() {
-		wg.Wait()
-		close(ch)
-	}()
-
-	for f := range ch {
-		if f.err != nil {
-			bar = append(bar, f.filename)
-			WriteJSONError(w, http.StatusInternalServerError, "failed")
-			return
+		for _, e := range errs {
+			errMsgs = append(errMsgs, e.Error())
 		}
+
+		WriteJSON(w, http.StatusInternalServerError, errMsgs)
+		return
 	}
 
-	WriteJSON(w, http.StatusCreated, allFileMeta)
-
-	// for _, fm := range allFileMeta {
-	// 	// NOTE: I think what needs to happen here is that we fire off a go routine for each potential file. We will need a channel with a max capacity of say 5, and then we can write the results (make a struct containing the id and err) to it. When all of the goroutines have finished, i.e. use a wait group, we can then check to see if any of the processes returned an error, and then Write our JSON err with that information
-	// 	fm.Owner = string(requestingUser)
-	// 	if err := h.fileService.UploadFile(r.Context(), fm); err != nil {
-	// 		// Will want to remove this so that we can better handle concurrent requests. We don't want to kill the program and return an error
-	// 		WriteJSONError(w, http.StatusInternalServerError, err.Error())
-	// 		return
-	// 	}
-	// 	if err := h.fileService.SaveFileMeta(r.Context(), fm); err != nil {
-	// 		// Will want to remove this so that we can better handle concurrent requests. We don't want to kill the program and return an error
-	// 		WriteJSONError(w, http.StatusInternalServerError, err.Error())
-	// 		return
-	// 	}
-	// }
-
-	// WriteJSON(w, http.StatusCreated, allFileMeta)
-
-	// Create channel
+	WriteJSON(w, http.StatusCreated, nil)
 }
 
 func (h *FileHandler) handleGetFile(w http.ResponseWriter, r *http.Request)     {}

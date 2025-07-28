@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/google/uuid"
 	"github.com/portbound/go-fs/internal/models"
@@ -23,8 +24,76 @@ func NewFileService(fileRepo repositories.FileRepository, storageRepo repositori
 	return &FileService{fileRepo: fileRepo, storageRepo: storageRepo, localStoragePath: localStoragePath}
 }
 
+func (fs *FileService) UploadFile(ctx context.Context, fm *models.FileMeta) error {
+	if err := fs.storageRepo.Upload(ctx, fm); err != nil {
+		return fmt.Errorf("services.UploadFile: failed to upload file to storage: %w", err)
+	}
+
+	os.Remove(fm.TmpDir)
+	return nil
+}
+
+func (fs *FileService) DeleteFile(ctx context.Context, fm *models.FileMeta) error {
+	if err := fs.storageRepo.Delete(ctx, fm); err != nil {
+		return fmt.Errorf("services.DeleteFile: failed to delete file from storage: %w", err)
+	}
+	return nil
+}
+
+func (fs *FileService) ProcessBatch(ctx context.Context, batch []*models.FileMeta) []error {
+	type result struct {
+		fm  *models.FileMeta
+		err error
+	}
+
+	ch := make(chan *result)
+	wg := sync.WaitGroup{}
+	proccessingErrors := []error{}
+
+	for _, item := range batch {
+		wg.Add(1)
+		go func(fm *models.FileMeta) {
+			defer wg.Done()
+			if err := fs.UploadFile(ctx, fm); err != nil {
+				ch <- &result{fm: fm, err: fmt.Errorf("upload failed for %s: %w", fm.Name, err)}
+				return
+			}
+
+			if err := fs.SaveFileMeta(ctx, fm); err != nil {
+				if err := fs.DeleteFile(ctx, fm); err != nil {
+					fmt.Printf("CRITICAL: failed to delete orphaned file %s from storage: %v\n", fm.Name)
+				}
+				ch <- &result{fm: fm, err: fmt.Errorf("save metadata failed for %s: %w", fm.Name, err)}
+				return
+			}
+
+			ch <- &result{fm: fm, err: nil}
+		}(item)
+	}
+
+	go func() {
+		wg.Wait()
+		close(ch)
+	}()
+
+	for res := range ch {
+		if res.err != nil {
+			proccessingErrors = append(proccessingErrors, res.err)
+		}
+	}
+
+	return proccessingErrors
+}
+
+func (fs *FileService) SaveFileMeta(ctx context.Context, fm *models.FileMeta) error {
+	if err := fs.fileRepo.Create(ctx, fm); err != nil {
+		return fmt.Errorf("services.SaveFileMeta: failed to save file metadata: %w", err)
+	}
+	return nil
+}
+
 func (fs *FileService) StageFileToDisk(ctx context.Context, metadata *models.FileMeta, reader io.Reader) error {
-	type copyResult struct {
+	type result struct {
 		bytes int64
 		err   error
 	}
@@ -45,10 +114,10 @@ func (fs *FileService) StageFileToDisk(ctx context.Context, metadata *models.Fil
 	}
 	defer tmpFile.Close()
 
-	ch := make(chan copyResult, 1)
+	ch := make(chan result, 1)
 	go func() {
 		bytes, err := io.Copy(tmpFile, reader)
-		ch <- copyResult{bytes: bytes, err: err}
+		ch <- result{bytes: bytes, err: err}
 	}()
 
 	select {
@@ -64,21 +133,5 @@ func (fs *FileService) StageFileToDisk(ctx context.Context, metadata *models.Fil
 		metadata.TmpDir = tmpFilePath
 	}
 
-	return nil
-}
-
-func (fs *FileService) UploadFile(ctx context.Context, fm *models.FileMeta) error {
-	if err := fs.storageRepo.Upload(ctx, fm); err != nil {
-		return fmt.Errorf("services.UploadFile: failed to upload file to storage: %w", err)
-	}
-
-	os.Remove(fm.TmpDir)
-	return nil
-}
-
-func (fs *FileService) SaveFileMeta(ctx context.Context, fm *models.FileMeta) error {
-	if err := fs.fileRepo.Create(ctx, fm); err != nil {
-		return fmt.Errorf("services.SaveFileMeta: failed to save file metadata: %w", err)
-	}
 	return nil
 }

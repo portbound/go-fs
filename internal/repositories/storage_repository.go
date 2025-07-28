@@ -8,4 +8,5 @@ import (
 
 type StorageRepository interface {
 	Upload(ctx context.Context, fm *models.FileMeta) error
+	Delete(ctx context.Context, fm *models.FileMeta) error
 }
