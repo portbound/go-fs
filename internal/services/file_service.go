@@ -92,6 +92,21 @@ func (fs *FileService) SaveFileMeta(ctx context.Context, fm *models.FileMeta) er
 	return nil
 }
 
+func (fs *FileService) DeleteFileMeta(ctx context.Context, id uuid.UUID) error {
+	if err := fs.fileRepo.Delete(ctx, id); err != nil {
+		return fmt.Errorf("services.DeleteFileMeta: failed to delete file metadata: %w", err)
+	}
+	return nil
+}
+
+func (fs *FileService) LookupFileMeta(ctx context.Context, id uuid.UUID) (*models.FileMeta, error) {
+	fm, err := fs.fileRepo.Get(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("services.LookupFileMeta: failed to get file for id '%s': %w", id, err)
+	}
+	return fm, nil
+}
+
 func (fs *FileService) StageFileToDisk(ctx context.Context, metadata *models.FileMeta, reader io.Reader) error {
 	type result struct {
 		bytes int64

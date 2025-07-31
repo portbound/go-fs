@@ -7,6 +7,7 @@ import (
 	"mime/multipart"
 	"net/http"
 
+	"github.com/google/uuid"
 	"github.com/portbound/go-fs/internal/models"
 	"github.com/portbound/go-fs/internal/services"
 )
@@ -78,4 +79,27 @@ func (h *FileHandler) handleFileUpload(w http.ResponseWriter, r *http.Request) {
 
 func (h *FileHandler) handleGetFile(w http.ResponseWriter, r *http.Request)     {}
 func (h *FileHandler) handleGetAllFiles(w http.ResponseWriter, r *http.Request) {}
-func (h *FileHandler) handleDeleteFile(w http.ResponseWriter, r *http.Request)  {}
+func (h *FileHandler) handleDeleteFile(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		WriteJSONError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	fm, err := h.fileService.LookupFileMeta(r.Context(), id)
+	if err != nil {
+		WriteJSONError(w, http.StatusNotFound, err.Error())
+		return
+	}
+
+	if err := h.fileService.DeleteFile(r.Context(), fm); err != nil {
+		WriteJSONError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	if err := h.fileService.DeleteFileMeta(r.Context(), id); err != nil {
+		WriteJSONError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	WriteJSON(w, http.StatusNoContent, nil)
+}
