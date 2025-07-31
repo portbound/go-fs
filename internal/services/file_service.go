@@ -60,8 +60,8 @@ func (fs *FileService) ProcessBatch(ctx context.Context, batch []*models.FileMet
 			}
 
 			if err := fs.SaveFileMeta(ctx, fm); err != nil {
-				if err := fs.DeleteFile(ctx, fm); err != nil {
-					fmt.Printf("CRITICAL: failed to delete orphaned file %s from storage: %v\n", fm.Name)
+				if delErr := fs.DeleteFile(ctx, fm); delErr != nil {
+					fmt.Printf("CRITICAL: failed to delete orphaned file %s from storage: %v\n", fm.Name, delErr)
 				}
 				ch <- &result{fm: fm, err: fmt.Errorf("save metadata failed for %s: %w", fm.Name, err)}
 				return
