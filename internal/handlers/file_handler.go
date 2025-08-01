@@ -80,20 +80,29 @@ func (h *FileHandler) handleFileUpload(w http.ResponseWriter, r *http.Request) {
 func (h *FileHandler) handleGetFile(w http.ResponseWriter, r *http.Request)     {}
 func (h *FileHandler) handleGetAllFiles(w http.ResponseWriter, r *http.Request) {}
 func (h *FileHandler) handleDeleteFile(w http.ResponseWriter, r *http.Request) {
+func (h *FileHandler) handleGetFile(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(r.PathValue("id"))
 	if err != nil {
 		WriteJSONError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	fm, err := h.fileService.LookupFileMeta(r.Context(), id)
+	fm, gcsReader, err := h.fileService.GetFile(r.Context(), id)
 	if err != nil {
-		WriteJSONError(w, http.StatusNotFound, err.Error())
+		WriteJSONError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	defer gcsReader.Close()
 
-	if err := h.fileService.DeleteFile(r.Context(), fm); err != nil {
-		WriteJSONError(w, http.StatusInternalServerError, err.Error())
+	w.Header().Set("Content-Type", fm.Type)
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", fm.Name))
+	w.WriteHeader(http.StatusOK)
+
+	if _, err := io.Copy(w, gcsReader); err != nil {
+		log.Printf("failed to stream file to client: %v", err)
+	}
+}
+
 		return
 	}
 

@@ -49,6 +49,16 @@ func (g *GCSStorage) Upload(ctx context.Context, fm *models.FileMeta) error {
 	return nil
 }
 
+func (g *GCSStorage) Download(ctx context.Context, fm *models.FileMeta) (io.ReadCloser, error) {
+	obj := g.client.Bucket(g.bkt).Object(fm.Name)
+
+	r, err := obj.NewReader(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("gcs.Get: failed to create reader: %w", err)
+	}
+
+	return r, nil
+}
 func (g *GCSStorage) Delete(ctx context.Context, fm *models.FileMeta) error {
 	obj := g.client.Bucket(g.bkt).Object(fm.Name)
 

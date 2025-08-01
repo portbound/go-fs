@@ -34,6 +34,19 @@ func (fs *FileService) UploadFile(ctx context.Context, fm *models.FileMeta) erro
 }
 
 func (fs *FileService) DeleteFile(ctx context.Context, fm *models.FileMeta) error {
+func (fs *FileService) GetFile(ctx context.Context, id uuid.UUID) (*models.FileMeta, io.ReadCloser, error) {
+	fm, err := fs.lookupFileMeta(ctx, id)
+	if err != nil {
+		return nil, nil, fmt.Errorf("services.GetFile: failed to lookup file metadata: %w", err)
+	}
+
+	gcsReader, err := fs.storageRepo.Download(ctx, fm)
+	if err != nil {
+		return nil, nil, fmt.Errorf("services.GetFile: failed to get file from storage: %w", err)
+	}
+
+	return fm, gcsReader, nil
+}
 	if err := fs.storageRepo.Delete(ctx, fm); err != nil {
 		return fmt.Errorf("services.DeleteFile: failed to delete file from storage: %w", err)
 	}
