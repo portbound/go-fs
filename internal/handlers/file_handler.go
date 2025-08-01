@@ -1,8 +1,10 @@
 package handlers
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"mime"
 	"mime/multipart"
 	"net/http"
@@ -23,8 +25,9 @@ func NewFileHandler(fs *services.FileService) *FileHandler {
 func (h *FileHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /files", h.handleFileUpload)
 	mux.HandleFunc("GET /files/{id}", h.handleGetFile)
-	mux.HandleFunc("GET /files", h.handleGetAllFiles)
+	mux.HandleFunc("GET /files", h.handleGetFiles)
 	mux.HandleFunc("DELETE /files/{id}", h.handleDeleteFile)
+	mux.HandleFunc("POST /files/delete-batch", h.handleDeleteBatch)
 }
 
 func (h *FileHandler) handleFileUpload(w http.ResponseWriter, r *http.Request) {
@@ -66,20 +69,17 @@ func (h *FileHandler) handleFileUpload(w http.ResponseWriter, r *http.Request) {
 		errMsgs := []string{}
 		errMsgs = append(errMsgs, fmt.Sprintf("failed to upload %d file(s)", len(errs)))
 
-		for _, e := range errs {
-			errMsgs = append(errMsgs, e.Error())
+		for _, err := range errs {
+			errMsgs = append(errMsgs, err.Error())
 		}
 
-		WriteJSON(w, http.StatusInternalServerError, errMsgs)
+		WriteJSON(w, http.StatusOK, errMsgs)
 		return
 	}
 
-	WriteJSON(w, http.StatusCreated, nil)
+	WriteJSON(w, http.StatusOK, nil)
 }
 
-func (h *FileHandler) handleGetFile(w http.ResponseWriter, r *http.Request)     {}
-func (h *FileHandler) handleGetAllFiles(w http.ResponseWriter, r *http.Request) {}
-func (h *FileHandler) handleDeleteFile(w http.ResponseWriter, r *http.Request) {
 func (h *FileHandler) handleGetFile(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(r.PathValue("id"))
 	if err != nil {
@@ -103,12 +103,44 @@ func (h *FileHandler) handleGetFile(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (h *FileHandler) handleGetFiles(w http.ResponseWriter, r *http.Request) {}
+
+func (h *FileHandler) handleDeleteFile(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		WriteJSONError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	if err := h.fileService.DeleteFileMeta(r.Context(), id); err != nil {
+	if err := h.fileService.DeleteFile(r.Context(), id); err != nil {
 		WriteJSONError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+
 	WriteJSON(w, http.StatusNoContent, nil)
+}
+
+func (h *FileHandler) handleDeleteBatch(w http.ResponseWriter, r *http.Request) {
+	var batch struct {
+		IDs []uuid.UUID `json:"ids"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&batch); err != nil {
+		WriteJSONError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	errs := h.fileService.DeleteBatch(r.Context(), &batch.IDs)
+	if len(errs) > 0 {
+		errMsgs := []string{}
+		errMsgs = append(errMsgs, fmt.Sprintf("failed to delete %d file(s)", len(errs)))
+
+		for _, err := range errs {
+			errMsgs = append(errMsgs, err.Error())
+		}
+
+		WriteJSON(w, http.StatusInternalServerError, errMsgs)
+		return
+	}
+	WriteJSON(w, http.StatusOK, nil)
 }

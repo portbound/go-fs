@@ -24,6 +24,7 @@ func NewFileService(fileRepo repositories.FileRepository, storageRepo repositori
 	return &FileService{fileRepo: fileRepo, storageRepo: storageRepo, localStoragePath: localStoragePath}
 }
 
+
 func (fs *FileService) UploadFile(ctx context.Context, fm *models.FileMeta) error {
 	if err := fs.storageRepo.Upload(ctx, fm); err != nil {
 		return fmt.Errorf("services.UploadFile: failed to upload file to storage: %w", err)
@@ -33,7 +34,6 @@ func (fs *FileService) UploadFile(ctx context.Context, fm *models.FileMeta) erro
 	return nil
 }
 
-func (fs *FileService) DeleteFile(ctx context.Context, fm *models.FileMeta) error {
 func (fs *FileService) GetFile(ctx context.Context, id uuid.UUID) (*models.FileMeta, io.ReadCloser, error) {
 	fm, err := fs.lookupFileMeta(ctx, id)
 	if err != nil {
@@ -47,9 +47,21 @@ func (fs *FileService) GetFile(ctx context.Context, id uuid.UUID) (*models.FileM
 
 	return fm, gcsReader, nil
 }
+
+func (fs *FileService) DeleteFile(ctx context.Context, id uuid.UUID) error {
+	fm, err := fs.lookupFileMeta(ctx, id)
+	if err != nil {
+		return fmt.Errorf("services.DeleteFile: failed to lookup file metadata: %w", err)
+	}
+
 	if err := fs.storageRepo.Delete(ctx, fm); err != nil {
 		return fmt.Errorf("services.DeleteFile: failed to delete file from storage: %w", err)
 	}
+
+	if err := fs.deleteFileMeta(ctx, id); err != nil {
+		return fmt.Errorf("services.DeleteFile: successfully deleted file, but failed to delete file metadata for id %s: %w", id, err)
+	}
+
 	return nil
 }
 
@@ -72,8 +84,8 @@ func (fs *FileService) ProcessBatch(ctx context.Context, batch []*models.FileMet
 				return
 			}
 
-			if err := fs.SaveFileMeta(ctx, fm); err != nil {
-				if delErr := fs.DeleteFile(ctx, fm); delErr != nil {
+			if err := fs.saveFileMeta(ctx, fm); err != nil {
+				if delErr := fs.DeleteFile(ctx, fm.ID); delErr != nil {
 					fmt.Printf("CRITICAL: failed to delete orphaned file %s from storage: %v\n", fm.Name, delErr)
 				}
 				ch <- &result{fm: fm, err: fmt.Errorf("save metadata failed for %s: %w", fm.Name, err)}
@@ -98,26 +110,9 @@ func (fs *FileService) ProcessBatch(ctx context.Context, batch []*models.FileMet
 	return proccessingErrors
 }
 
-func (fs *FileService) SaveFileMeta(ctx context.Context, fm *models.FileMeta) error {
-	if err := fs.fileRepo.Create(ctx, fm); err != nil {
-		return fmt.Errorf("services.SaveFileMeta: failed to save file metadata: %w", err)
-	}
-	return nil
-}
+func (fs *FileService) DeleteBatch(ctx context.Context, ids *[]uuid.UUID) []error {
 
-func (fs *FileService) DeleteFileMeta(ctx context.Context, id uuid.UUID) error {
-	if err := fs.fileRepo.Delete(ctx, id); err != nil {
-		return fmt.Errorf("services.DeleteFileMeta: failed to delete file metadata: %w", err)
-	}
 	return nil
-}
-
-func (fs *FileService) LookupFileMeta(ctx context.Context, id uuid.UUID) (*models.FileMeta, error) {
-	fm, err := fs.fileRepo.Get(ctx, id)
-	if err != nil {
-		return nil, fmt.Errorf("services.LookupFileMeta: failed to get file for id '%s': %w", id, err)
-	}
-	return fm, nil
 }
 
 func (fs *FileService) StageFileToDisk(ctx context.Context, metadata *models.FileMeta, reader io.Reader) error {
@@ -162,4 +157,26 @@ func (fs *FileService) StageFileToDisk(ctx context.Context, metadata *models.Fil
 	}
 
 	return nil
+}
+
+func (fs *FileService) saveFileMeta(ctx context.Context, fm *models.FileMeta) error {
+	if err := fs.fileRepo.Create(ctx, fm); err != nil {
+		return fmt.Errorf("services.SaveFileMeta: failed to save file metadata: %w", err)
+	}
+	return nil
+}
+
+func (fs *FileService) deleteFileMeta(ctx context.Context, id uuid.UUID) error {
+	if err := fs.fileRepo.Delete(ctx, id); err != nil {
+		return fmt.Errorf("services.DeleteFileMeta: failed to delete file metadata: %w", err)
+	}
+	return nil
+}
+
+func (fs *FileService) lookupFileMeta(ctx context.Context, id uuid.UUID) (*models.FileMeta, error) {
+	fm, err := fs.fileRepo.Get(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("services.LookupFileMeta: failed to get file for id '%s': %w", id, err)
+	}
+	return fm, nil
 }
