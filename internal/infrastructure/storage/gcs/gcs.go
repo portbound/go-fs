@@ -16,8 +16,7 @@ type GCSStorage struct {
 	bkt    string
 }
 
-func NewGCSStorage(bkt string) (*GCSStorage, error) {
-	ctx := context.Background()
+func NewGCSStorage(ctx context.Context, bkt string) (*GCSStorage, error) {
 	client, err := storage.NewClient(ctx)
 	if err != nil {
 		return nil, err

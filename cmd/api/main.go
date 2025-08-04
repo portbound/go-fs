@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
@@ -15,6 +16,7 @@ import (
 
 func main() {
 	cfg, err := config.Load()
+
 	if err != nil {
 		log.Fatalf("failed to load config: %v", err)
 	}
@@ -53,7 +55,8 @@ func buildFileRepo(cfg *config.Config) (repositories.FileRepository, error) {
 func buildStorageRepo(cfg *config.Config) (repositories.StorageRepository, error) {
 	switch cfg.StorageProvider {
 	case "gcs":
-		return gcs.NewGCSStorage(cfg.BucketName)
+		ctx := context.Background()
+		return gcs.NewGCSStorage(ctx, cfg.BucketName)
 	default:
 		return nil, fmt.Errorf("unsupported cloud provider: %s", cfg.StorageProvider)
 	}

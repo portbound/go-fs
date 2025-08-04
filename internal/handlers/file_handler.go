@@ -64,7 +64,7 @@ func (h *FileHandler) handleFileUpload(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	errs := h.fileService.ProcessBatch(r.Context(), batch)
+	errs := h.fileService.UploadBatch(r.Context(), batch)
 	if len(errs) > 0 {
 		errMsgs := []string{}
 		errMsgs = append(errMsgs, fmt.Sprintf("failed to upload %d file(s)", len(errs)))
