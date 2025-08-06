@@ -52,6 +52,16 @@ func (fs *FileService) UploadBatch(ctx context.Context, batch []*models.FileMeta
 		wg.Add(1)
 		go func(fm *models.FileMeta) {
 			defer wg.Done()
+			mime := strings.ToLower(strings.TrimSuffix(item.ContentType, "/"))
+
+			if mime == "image" {
+
+			}
+			if mime == "video" {
+				// create thumbnail
+				// create preview
+			}
+
 			if err := fs.storage.Upload(ctx, fm); err != nil {
 				ch <- &result{fm: fm, err: fmt.Errorf("upload failed for %s: %w", fm.Name, err)}
 				return

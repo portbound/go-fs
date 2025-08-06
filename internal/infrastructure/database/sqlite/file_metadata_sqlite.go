@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"time"
 
 	_ "embed"
 
@@ -47,10 +46,9 @@ func (db *DB) Create(ctx context.Context, filemeta *models.FileMeta) error {
 		ID:          filemeta.ID,
 		Name:        filemeta.Name,
 		Owner:       filemeta.Owner,
-		ContentType: filemeta.Type,
+		ContentType: filemeta.ContentType,
 		Size:        filemeta.Size,
-		UploadDate:  filemeta.UploadDate.Format(time.RFC3339),
-		StoragePath: filemeta.StoragePath,
+		StoragePath: filemeta.OriginalPath,
 	}
 	return db.Queries.Create(ctx, params)
 }
@@ -85,18 +83,12 @@ func (db *DB) Delete(ctx context.Context, id uuid.UUID) error {
 }
 
 func mapToFile(f File) (*models.FileMeta, error) {
-	uploadDate, err := time.Parse(time.RFC3339, f.UploadDate)
-	if err != nil {
-		return nil, fmt.Errorf("sqlite.mapToFile: failed to parse upload date: %w", err)
-	}
-
 	return &models.FileMeta{
-		ID:          f.ID,
-		Name:        f.Name,
-		Owner:       f.Owner,
-		Type:        f.ContentType,
-		Size:        f.Size,
-		UploadDate:  uploadDate,
-		StoragePath: f.StoragePath,
+		ID:           f.ID,
+		Name:         f.Name,
+		Owner:        f.Owner,
+		ContentType:  f.ContentType,
+		Size:         f.Size,
+		OriginalPath: f.StoragePath,
 	}, nil
 }

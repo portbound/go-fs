@@ -3,7 +3,6 @@ package sqlite_test
 import (
 	"reflect"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/portbound/go-fs/internal/infrastructure/database/sqlite"
@@ -93,14 +92,13 @@ func TestDB_Get(t *testing.T) {
 func seedFilemeta(t *testing.T) *models.FileMeta {
 	t.Helper()
 	return &models.FileMeta{
-		ID:          uuid.New(),
-		Name:        "test.txt",
-		Owner:       "tester",
-		Type:        "plain/text",
-		Size:        10,
-		UploadDate:  time.Now(),
-		StoragePath: "test-path",
-		TmpDir:      "test-dir",
+		ID:           uuid.New(),
+		Name:         "test.txt",
+		Owner:        "tester",
+		ContentType:  "plain/text",
+		Size:         10,
+		OriginalPath: "test-path",
+		TmpDir:       "test-dir",
 	}
 }
 

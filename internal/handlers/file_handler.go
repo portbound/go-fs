@@ -51,8 +51,8 @@ func (h *FileHandler) handleFileUpload(w http.ResponseWriter, r *http.Request) {
 
 		if mp.FileName() != "" {
 			metadata := models.FileMeta{
-				Name: mp.FileName(),
-				Type: mp.Header.Get("Content-Type"),
+				Name:        mp.FileName(),
+				ContentType: mp.Header.Get("Content-Type"),
 			}
 
 			if err := h.fileService.StageFileToDisk(r.Context(), &metadata, mp); err != nil {
@@ -94,7 +94,7 @@ func (h *FileHandler) handleGetFile(w http.ResponseWriter, r *http.Request) {
 	}
 	defer gcsReader.Close()
 
-	w.Header().Set("Content-Type", fm.Type)
+	w.Header().Set("Content-Type", fm.ContentType)
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", fm.Name))
 	w.WriteHeader(http.StatusOK)
 
