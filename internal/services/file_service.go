@@ -26,20 +26,6 @@ func NewFileService(fileRepo repositories.FileRepository, storageRepo repositori
 	return &FileService{db: fileRepo, storage: storageRepo, TmpStorage: tmpStorage}
 }
 
-func (fs *FileService) GetFile(ctx context.Context, id uuid.UUID) (*models.FileMeta, io.ReadCloser, error) {
-	fm, err := fs.LookupFileMeta(ctx, id)
-	if err != nil {
-		return nil, nil, fmt.Errorf("services.GetFile: failed to lookup file metadata: %w", err)
-	}
-
-	gcsReader, err := fs.storage.Download(ctx, fm)
-	if err != nil {
-		return nil, nil, fmt.Errorf("services.GetFile: failed to get file from storage: %w", err)
-	}
-
-	return fm, gcsReader, nil
-}
-
 func (fs *FileService) ProcessBatch(ctx context.Context, batch []*models.FileMeta) []error {
 	ch := make(chan error)
 	wg := sync.WaitGroup{}
@@ -126,6 +112,24 @@ func (fs *FileService) ProcessBatch(ctx context.Context, batch []*models.FileMet
 	}
 
 	return proccessingErrors
+}
+
+func (fs *FileService) GetFile(ctx context.Context, id uuid.UUID) (*models.FileMeta, io.ReadCloser, error) {
+	fm, err := fs.LookupFileMeta(ctx, id)
+	if err != nil {
+		return nil, nil, fmt.Errorf("services.GetFile: failed to lookup file metadata: %w", err)
+	}
+
+	gcsReader, err := fs.storage.Download(ctx, fm)
+	if err != nil {
+		return nil, nil, fmt.Errorf("services.GetFile: failed to get file from storage: %w", err)
+	}
+
+	return fm, gcsReader, nil
+}
+
+func (fs *FileService) GetBatch(ctx context.Context) {
+
 }
 
 func (fs *FileService) DeleteFile(ctx context.Context, fm *models.FileMeta) error {

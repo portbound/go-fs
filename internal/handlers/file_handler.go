@@ -42,7 +42,7 @@ func (h *FileHandler) handleFileUpload(w http.ResponseWriter, r *http.Request) {
 	reader := multipart.NewReader(r.Body, params["boundary"])
 	batch := []*models.FileMeta{}
 	for {
-		mp, err := reader.NextPart()
+		part, err := reader.NextPart()
 		if err != nil {
 			if err == io.EOF {
 				break
@@ -51,13 +51,13 @@ func (h *FileHandler) handleFileUpload(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		if mp.FileName() != "" {
+		if part.FileName() != "" {
 			metadata := models.FileMeta{
-				Name:        mp.FileName(),
-				ContentType: mp.Header.Get("Content-Type"),
+				Name:        part.FileName(),
+				ContentType: part.Header.Get("Content-Type"),
 			}
 
-			path, err := utils.StageFileToDisk(r.Context(), h.fileService.TmpStorage, metadata.Name, mp)
+			path, err := utils.StageFileToDisk(r.Context(), h.fileService.TmpStorage, metadata.Name, part)
 			if err != nil {
 				WriteJSONError(w, http.StatusInternalServerError, err.Error())
 				return
@@ -107,7 +107,10 @@ func (h *FileHandler) handleGetFile(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h *FileHandler) handleGetFiles(w http.ResponseWriter, r *http.Request) {}
+func (h *FileHandler) handleGetFiles(w http.ResponseWriter, r *http.Request) {
+	// query param to filter by date, type, and size? 
+	h.fileService.
+}
 
 func (h *FileHandler) handleDeleteFile(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(r.PathValue("id"))
