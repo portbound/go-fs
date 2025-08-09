@@ -92,13 +92,13 @@ func TestDB_Get(t *testing.T) {
 func seedFilemeta(t *testing.T) *models.FileMeta {
 	t.Helper()
 	return &models.FileMeta{
-		ID:           uuid.New(),
-		Name:         "test.txt",
-		Owner:        "tester",
-		ContentType:  "plain/text",
-		Size:         10,
-		OriginalPath: "test-path",
-		TmpDir:       "test-dir",
+		ID:          uuid.New(),
+		Name:        "test.txt",
+		Owner:       "tester",
+		ContentType: "plain/text",
+		Size:        10,
+		FilePath:    "test-path",
+		TmpFilePath: "test-dir",
 	}
 }
 

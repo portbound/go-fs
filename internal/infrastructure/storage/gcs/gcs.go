@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"time"
 
 	"cloud.google.com/go/storage"
@@ -25,21 +26,22 @@ func NewGCSStorage(ctx context.Context, bkt string) (*GCSStorage, error) {
 	return &GCSStorage{client: client, bkt: bkt}, nil
 }
 
-func (g *GCSStorage) Upload(ctx context.Context, fm *models.FileMeta) error {
-	file, err := os.Open(fm.TmpDir)
+func (g *GCSStorage) Upload(ctx context.Context, path string) error {
+	src, err := os.Open(path)
 	if err != nil {
-		return fmt.Errorf("gcs.Upload: failed to open temp file %s: %w", fm.TmpDir, err)
+		return fmt.Errorf("gcs.Upload: failed to open file %s: %w", path, err)
 	}
-	defer file.Close()
+	defer src.Close()
 
 	ctx, cancel := context.WithTimeout(ctx, time.Second*180)
 	defer cancel()
 
-	obj := g.client.Bucket(g.bkt).Object(fm.Name)
+	fileName := filepath.Base(path)
+	obj := g.client.Bucket(g.bkt).Object(fileName)
 	obj = obj.If(storage.Conditions{DoesNotExist: true})
 	wc := obj.NewWriter(ctx)
 
-	if _, err := io.Copy(wc, file); err != nil {
+	if _, err := io.Copy(wc, src); err != nil {
 		return fmt.Errorf("gcs.Upload: failed to copy file to writer: %w", err)
 	}
 
@@ -59,11 +61,11 @@ func (g *GCSStorage) Download(ctx context.Context, fm *models.FileMeta) (io.Read
 
 	return r, nil
 }
-func (g *GCSStorage) Delete(ctx context.Context, fm *models.FileMeta) error {
-	obj := g.client.Bucket(g.bkt).Object(fm.Name)
+func (g *GCSStorage) Delete(ctx context.Context, fileName string) error {
+	obj := g.client.Bucket(g.bkt).Object(fileName)
 
 	if err := obj.Delete(ctx); err != nil {
-		return fmt.Errorf("gcs.Delete: failed to delete file: %w", err)
+		return fmt.Errorf("gcs.Delete: failed to delete %s: %w", fileName, err)
 	}
 	return nil
 }

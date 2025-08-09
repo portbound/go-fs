@@ -48,7 +48,7 @@ func (db *DB) Create(ctx context.Context, filemeta *models.FileMeta) error {
 		Owner:       filemeta.Owner,
 		ContentType: filemeta.ContentType,
 		Size:        filemeta.Size,
-		StoragePath: filemeta.OriginalPath,
+		StoragePath: filemeta.FilePath,
 	}
 	return db.Queries.Create(ctx, params)
 }
@@ -84,11 +84,11 @@ func (db *DB) Delete(ctx context.Context, id uuid.UUID) error {
 
 func mapToFile(f File) (*models.FileMeta, error) {
 	return &models.FileMeta{
-		ID:           f.ID,
-		Name:         f.Name,
-		Owner:        f.Owner,
-		ContentType:  f.ContentType,
-		Size:         f.Size,
-		OriginalPath: f.StoragePath,
+		ID:          f.ID,
+		Name:        f.Name,
+		Owner:       f.Owner,
+		ContentType: f.ContentType,
+		Size:        f.Size,
+		FilePath:    f.StoragePath,
 	}, nil
 }
