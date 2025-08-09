@@ -1,71 +1,53 @@
 package services
 
 import (
+	"context"
 	"fmt"
 	"image"
 	"io"
 	"os"
-	"path"
-	"path/filepath"
-	"strings"
 
 	_ "image/gif"
-	_ "image/jpeg"
+	"image/jpeg"
 	_ "image/png"
 
 	"github.com/portbound/go-fs/internal/models"
-	"github.com/portbound/go-fs/internal/util"
 	"golang.org/x/image/draw"
 )
 
-type Generator struct {
+type ThumbnailGenerator struct {
 	dir    string
 	width  int
 	height int
 }
 
-func NewThumbnailGenerator(path string) (*Generator, error) {
-	return &Generator{dir: path, width: 150, height: 150}, nil
+func NewThumbnailGenerator(path string) *ThumbnailGenerator {
+	return &ThumbnailGenerator{dir: path, width: 150, height: 150}
 }
 
-func (g *Generator) GenerateThumbnailFromImage(fm *models.FileMeta) error {
-	inputFile, err := os.Open(filepath.Join(g.dir, fm.Name))
+func (tg *ThumbnailGenerator) CreateThumbnail(ctx context.Context, fm *models.FileMeta) (io.Reader, error) {
+	file, err := os.Open(fm.TmpFilePath)
 	if err != nil {
-		return fmt.Errorf("services.GenerateThumbnailFromImage: failed to open file: %w", err)
+		return nil, fmt.Errorf("services.CreateThumbnail: failed to open file: %w", err)
 	}
-	defer inputFile.Close()
+	defer file.Close()
 
-	img, _, err := image.Decode(inputFile)
+	srcImg, _, err := image.Decode(file)
 	if err != nil {
-		return fmt.Errorf("services.GenerateThumbnailFromImage: failed to decode image: %w", err)
+		return nil, fmt.Errorf("services.CreateThumbnail: failed to decode source image: %w", err)
 	}
 
-	thumbnail := image.NewRGBA(image.Rect(0, 0, g.width, g.height))
+	thumbnail := image.NewRGBA(image.Rect(0, 0, tg.width, tg.height))
+	draw.CatmullRom.Scale(thumbnail, thumbnail.Bounds(), srcImg, srcImg.Bounds(), draw.Src, nil)
 
-	draw.CatmullRom.Scale(thumbnail, thumbnail.Bounds(), img, img.Bounds(), draw.Src, nil)
-
-	outputFile, err := os.Create(path.Join(g.dir, fm.Name, "_thumbnail"))
-	if err != nil {
-		return fmt.Errorf("services.GenerateThumbnailFromImage: failed to create thumbnail: %w", err)
-	}
-	defer outputFile.Close()
-
-	imgType := strings.TrimPrefix(fm.ContentType, "image/")
-
-	switch imgType {
-	case "jpg", "png", "gif":
-		thumbnail, _, err := image.Decode(outputFile)
+	pipeReader, pipeWriter := io.Pipe()
+	go func() {
+		defer pipeWriter.Close()
+		err := jpeg.Encode(pipeWriter, thumbnail, nil)
 		if err != nil {
-			fmt.Errorf("services.GenerateThumbnailFromImage: failed to decode thumbnail: %w", err)
+			pipeWriter.CloseWithError(err)
 		}
+	}()
 
-	// TODO: create pipe
-	default:
-		fmt.Errorf("services.GenerateThumbnailFromImage: unsupported image type: %s", imgType)
-	}
-	return nil
-}
-
-func (g *Generator) GenerateThumbnailFromVideo(name string) (*models.Thumbnail, error) {
-	return nil, nil
+	return pipeReader, nil
 }

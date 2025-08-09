@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/portbound/go-fs/internal/models"
 	"github.com/portbound/go-fs/internal/services"
+	"github.com/portbound/go-fs/internal/utils"
 )
 
 type FileHandler struct {
@@ -56,16 +57,19 @@ func (h *FileHandler) handleFileUpload(w http.ResponseWriter, r *http.Request) {
 				ContentType: mp.Header.Get("Content-Type"),
 			}
 
-			if err := h.fileService.StageFileToDisk(r.Context(), &metadata, mp); err != nil {
+			// pattern := fmt.Sprintf("*-%s", metadata.Name)
+			path, err := utils.StageFileToDisk(r.Context(), h.fileService.TmpStorage, metadata.Name, mp)
+			if err != nil {
 				WriteJSONError(w, http.StatusInternalServerError, err.Error())
 				return
 			}
 
+			metadata.TmpFilePath = path
 			batch = append(batch, &metadata)
 		}
 	}
 
-	errs := h.fileService.UploadBatch(r.Context(), batch)
+	errs := h.fileService.ProcessBatch(r.Context(), batch)
 	if len(errs) > 0 {
 		errMsgs := []string{}
 		errMsgs = append(errMsgs, fmt.Sprintf("failed to upload %d file(s)", len(errs)))
@@ -113,7 +117,13 @@ func (h *FileHandler) handleDeleteFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.fileService.DeleteFile(r.Context(), id); err != nil {
+	fm, err := h.fileService.LookupFileMeta(r.Context(), id)
+	if err != nil {
+		WriteJSONError(w, http.StatusNotFound, err.Error())
+		return
+	}
+
+	if err := h.fileService.DeleteFile(r.Context(), fm.Name); err != nil {
 		WriteJSONError(w, http.StatusInternalServerError, err.Error())
 		return
 	}

@@ -3,30 +3,33 @@ package services
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 
 	"github.com/google/uuid"
 	"github.com/portbound/go-fs/internal/models"
 	"github.com/portbound/go-fs/internal/repositories"
+	"github.com/portbound/go-fs/internal/utils"
 )
 
 type FileService struct {
-	db               repositories.FileRepository
-	storage          repositories.StorageRepository
-	localStoragePath string
+	db                 repositories.FileRepository
+	storage            repositories.StorageRepository
+	thumbnailGenerator *ThumbnailGenerator
+	TmpStorage         string
 }
 
-func NewFileService(fileRepo repositories.FileRepository, storageRepo repositories.StorageRepository, localStoragePath string) *FileService {
-	return &FileService{db: fileRepo, storage: storageRepo, localStoragePath: localStoragePath}
+func NewFileService(fileRepo repositories.FileRepository, storageRepo repositories.StorageRepository, tmpStorage string) *FileService {
+	tg := NewThumbnailGenerator(tmpStorage)
+	return &FileService{db: fileRepo, storage: storageRepo, thumbnailGenerator: tg, TmpStorage: tmpStorage}
 }
 
 func (fs *FileService) GetFile(ctx context.Context, id uuid.UUID) (*models.FileMeta, io.ReadCloser, error) {
-	fm, err := fs.lookupFileMeta(ctx, id)
+	fm, err := fs.LookupFileMeta(ctx, id)
 	if err != nil {
 		return nil, nil, fmt.Errorf("services.GetFile: failed to lookup file metadata: %w", err)
 	}
@@ -39,13 +42,8 @@ func (fs *FileService) GetFile(ctx context.Context, id uuid.UUID) (*models.FileM
 	return fm, gcsReader, nil
 }
 
-func (fs *FileService) UploadBatch(ctx context.Context, batch []*models.FileMeta) []error {
-	type result struct {
-		fm  *models.FileMeta
-		err error
-	}
-
-	ch := make(chan *result)
+func (fs *FileService) ProcessBatch(ctx context.Context, batch []*models.FileMeta) []error {
+	ch := make(chan error)
 	wg := sync.WaitGroup{}
 	proccessingErrors := []error{}
 
@@ -53,31 +51,65 @@ func (fs *FileService) UploadBatch(ctx context.Context, batch []*models.FileMeta
 		wg.Add(1)
 		go func(fm *models.FileMeta) {
 			defer wg.Done()
-			mime := strings.ToLower(strings.TrimSuffix(item.ContentType, "/"))
+			fileType := strings.ToLower(strings.Split(fm.ContentType, "/")[0])
+			fileSubType := strings.ToLower(strings.Split(fm.ContentType, "/")[1])
 
-			if mime == "image" {
+			if fileType == "image" {
+				switch fileSubType {
+				case "jpg", "png", "gif":
+					r, err := fs.thumbnailGenerator.CreateThumbnail(ctx, fm)
+					if err != nil {
+						ch <- fmt.Errorf("services.UploadBatch: failed to create thumbnail for %s: %w", fm.Name, err)
+						return
+					}
 
-			}
-			if mime == "video" {
-				// create thumbnail
-				// create preview
-			}
-
-			if err := fs.storage.Upload(ctx, fm); err != nil {
-				ch <- &result{fm: fm, err: fmt.Errorf("upload failed for %s: %w", fm.Name, err)}
-				return
-			}
-
-			if err := fs.saveFilemeta(ctx, fm); err != nil {
-				if delErr := fs.DeleteFile(ctx, fm.ID); delErr != nil {
-					fmt.Printf("CRITICAL: failed to delete orphaned file %s from storage: %v\n", fm.Name, delErr)
+					fileName := fmt.Sprintf("thumbnail-%s.jpg", fm.Name)
+					path, err := utils.StageFileToDisk(ctx, fs.TmpStorage, fileName, r)
+					if err != nil {
+						ch <- fmt.Errorf("services.Processbatch: failed to stage thumbnail for %s to disk: %w", fm.Name, err)
+						return
+					}
+					fm.TmpThumbPath = path
+				default:
+					ch <- errors.New("services.ProcessBatch: failed to create thumnail for %s: file type not supported")
+					return
 				}
-				ch <- &result{fm: fm, err: fmt.Errorf("save metadata failed for %s: %w", fm.Name, err)}
+			}
+
+			if err := fs.storage.Upload(ctx, fm.TmpFilePath); err != nil {
+				ch <- fmt.Errorf("upload failed for %s: %w", fm.Name, err)
 				return
 			}
 
-			ch <- &result{fm: fm, err: nil}
-			os.Remove(fm.TmpDir)
+			if err := fs.storage.Upload(ctx, fm.TmpThumbPath); err != nil {
+				if rbErr := fs.DeleteFile(ctx, fm.Name); rbErr != nil {
+					fmt.Printf("CRITICAL: failed to delete orphaned file %s from storage: %v\n", fm.Name, rbErr)
+				}
+				ch <- fmt.Errorf("services.Processbatch: failed to upload thumbnail for %s: %w", fm.Name, err)
+				return
+			}
+
+			if err := fs.SaveFileMeta(ctx, fm); err != nil {
+				if rbErr := fs.DeleteFile(ctx, fm.Name); rbErr != nil {
+					fmt.Printf("CRITICAL: failed to delete orphaned file %s from storage: %v\n", fm.Name, rbErr)
+				}
+				if rbErr := fs.DeleteFile(ctx, fm.Thumbnail); rbErr != nil {
+					fmt.Printf("CRITICAL: failed to delete orphaned file %s from storage: %v\n", fm.Name, rbErr)
+				}
+				ch <- fmt.Errorf("save metadata failed for %s: %w", fm.Name, err)
+				return
+			}
+
+			err := os.Remove(fm.TmpFilePath)
+			if err != nil {
+				fmt.Printf("failed to remove tmpfile: %v", err)
+			}
+			err = os.Remove(fm.TmpThumbPath)
+			if err != nil {
+				fmt.Printf("failed to remove tmpthumb: %v", err)
+			}
+
+			ch <- nil
 		}(item)
 	}
 
@@ -86,29 +118,19 @@ func (fs *FileService) UploadBatch(ctx context.Context, batch []*models.FileMeta
 		close(ch)
 	}()
 
-	for res := range ch {
-		if res.err != nil {
-			proccessingErrors = append(proccessingErrors, res.err)
+	for err := range ch {
+		if err != nil {
+			proccessingErrors = append(proccessingErrors, err)
 		}
 	}
 
 	return proccessingErrors
 }
 
-func (fs *FileService) DeleteFile(ctx context.Context, id uuid.UUID) error {
-	fm, err := fs.lookupFileMeta(ctx, id)
-	if err != nil {
-		return fmt.Errorf("services.DeleteFile: failed to lookup file metadata: %w", err)
-	}
-
-	if err := fs.storage.Delete(ctx, fm); err != nil {
+func (fs *FileService) DeleteFile(ctx context.Context, name string) error {
+	if err := fs.storage.Delete(ctx, name); err != nil {
 		return fmt.Errorf("services.DeleteFile: failed to delete file from storage: %w", err)
 	}
-
-	if err := fs.deleteFileMeta(ctx, id); err != nil {
-		return fmt.Errorf("services.DeleteFile: successfully deleted file, but failed to delete file metadata for id %s: %w", id, err)
-	}
-
 	return nil
 }
 
@@ -117,65 +139,21 @@ func (fs *FileService) DeleteBatch(ctx context.Context, ids *[]uuid.UUID) []erro
 	return nil
 }
 
-func (fs *FileService) StageFileToDisk(ctx context.Context, metadata *models.FileMeta, reader io.Reader) error {
-	type result struct {
-		bytes int64
-		err   error
-	}
-
-	tmpDir := filepath.Join(fs.localStoragePath, "tmp")
-
-	if err := os.MkdirAll(tmpDir, 0755); err != nil {
-		return fmt.Errorf("services.NewFileService: failed to create tmp storage dir: %w", err)
-	}
-
-	metadata.ID = uuid.New()
-	tmpFileName := fmt.Sprintf("%s-%s", metadata.ID.String(), strings.ReplaceAll(metadata.Name, " ", "_"))
-	tmpFilePath := filepath.Join(tmpDir, tmpFileName)
-
-	tmpFile, err := os.Create(tmpFilePath)
-	if err != nil {
-		return fmt.Errorf("services.StageFileToDisk: failed to create tmp file: %w", err)
-	}
-	defer tmpFile.Close()
-
-	ch := make(chan result, 1)
-	go func() {
-		bytes, err := io.Copy(tmpFile, reader)
-		ch <- result{bytes: bytes, err: err}
-	}()
-
-	select {
-	case <-ctx.Done():
-		os.Remove(tmpFilePath)
-		return ctx.Err()
-	case result := <-ch:
-		if result.err != nil {
-			os.Remove(tmpFilePath)
-			return fmt.Errorf("services.StageFileToDisk: failed to write to tmp file: %w", result.err)
-		}
-		metadata.Size = result.bytes
-		metadata.TmpDir = tmpFilePath
-	}
-
-	return nil
-}
-
-func (fs *FileService) saveFilemeta(ctx context.Context, fm *models.FileMeta) error {
+func (fs *FileService) SaveFileMeta(ctx context.Context, fm *models.FileMeta) error {
 	if err := fs.db.Create(ctx, fm); err != nil {
 		return fmt.Errorf("services.SaveFileMeta: failed to save file metadata: %w", err)
 	}
 	return nil
 }
 
-func (fs *FileService) deleteFileMeta(ctx context.Context, id uuid.UUID) error {
+func (fs *FileService) DeleteFileMeta(ctx context.Context, id uuid.UUID) error {
 	if err := fs.db.Delete(ctx, id); err != nil {
 		return fmt.Errorf("services.DeleteFileMeta: failed to delete file metadata: %w", err)
 	}
 	return nil
 }
 
-func (fs *FileService) lookupFileMeta(ctx context.Context, id uuid.UUID) (*models.FileMeta, error) {
+func (fs *FileService) LookupFileMeta(ctx context.Context, id uuid.UUID) (*models.FileMeta, error) {
 	fm, err := fs.db.Get(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("services.LookupFileMeta: failed to get file for id '%s': %w", id, err)
