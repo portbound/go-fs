@@ -15,7 +15,6 @@ func StageFileToDisk(ctx context.Context, path string, fileName string, reader i
 	}
 
 	file, err := os.Create(filepath.Join(path, fileName))
-	// file, err := os.CreateTemp(dir, pattern)
 	if err != nil {
 		return "", fmt.Errorf("util.StageFileToDisk: failed to create temp file: %w", err)
 	}

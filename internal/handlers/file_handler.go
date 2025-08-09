@@ -57,7 +57,6 @@ func (h *FileHandler) handleFileUpload(w http.ResponseWriter, r *http.Request) {
 				ContentType: mp.Header.Get("Content-Type"),
 			}
 
-			// pattern := fmt.Sprintf("*-%s", metadata.Name)
 			path, err := utils.StageFileToDisk(r.Context(), h.fileService.TmpStorage, metadata.Name, mp)
 			if err != nil {
 				WriteJSONError(w, http.StatusInternalServerError, err.Error())
@@ -123,7 +122,7 @@ func (h *FileHandler) handleDeleteFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.fileService.DeleteFile(r.Context(), fm.Name); err != nil {
+	if err := h.fileService.DeleteFile(r.Context(), fm); err != nil {
 		WriteJSONError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
