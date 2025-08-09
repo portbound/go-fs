@@ -47,7 +47,7 @@ func (fs *FileService) ProcessBatch(ctx context.Context, batch []*models.FileMet
 						return
 					}
 
-					fileName := fmt.Sprintf("thumbnail-%s.jpg", fm.Name)
+					fileName := fmt.Sprintf("thumbnail-%s.jpg", strings.TrimSuffix(fm.Name, filepath.Ext(fm.Name)))
 					path, err := utils.StageFileToDisk(ctx, fs.TmpStorage, fileName, r)
 					if err != nil {
 						ch <- fmt.Errorf("services.Processbatch: failed to stage thumbnail for %s to disk: %w", fm.Name, err)
