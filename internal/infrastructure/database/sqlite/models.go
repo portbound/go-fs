@@ -5,15 +5,16 @@
 package sqlite
 
 import (
+	"database/sql"
+
 	"github.com/google/uuid"
 )
 
 type File struct {
-	ID          uuid.UUID `json:"id"`
-	Name        string    `json:"name"`
-	Owner       string    `json:"owner"`
-	ContentType string    `json:"content_type"`
-	Size        int64     `json:"size"`
-	UploadDate  string    `json:"upload_date"`
-	StoragePath string    `json:"storage_path"`
+	ID          uuid.UUID      `json:"id"`
+	Name        string         `json:"name"`
+	Owner       string         `json:"owner"`
+	ContentType string         `json:"content_type"`
+	FilePath    string         `json:"file_path"`
+	ThumbPath   sql.NullString `json:"thumb_path"`
 }

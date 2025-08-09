@@ -7,26 +7,26 @@ package sqlite
 
 import (
 	"context"
+	"database/sql"
 
 	"github.com/google/uuid"
 )
 
 const create = `-- name: Create :exec
 INSERT INTO files (
-	id, name, owner, content_type, size, upload_date, storage_path
+	id, name, owner, content_type, file_path, thumb_path
 ) VALUES (
-	?, ?, ?, ?, ?, ?, ?
+	?, ?, ?, ?, ?, ?
 )
 `
 
 type CreateParams struct {
-	ID          uuid.UUID `json:"id"`
-	Name        string    `json:"name"`
-	Owner       string    `json:"owner"`
-	ContentType string    `json:"content_type"`
-	Size        int64     `json:"size"`
-	UploadDate  string    `json:"upload_date"`
-	StoragePath string    `json:"storage_path"`
+	ID          uuid.UUID      `json:"id"`
+	Name        string         `json:"name"`
+	Owner       string         `json:"owner"`
+	ContentType string         `json:"content_type"`
+	FilePath    string         `json:"file_path"`
+	ThumbPath   sql.NullString `json:"thumb_path"`
 }
 
 func (q *Queries) Create(ctx context.Context, arg CreateParams) error {
@@ -35,9 +35,8 @@ func (q *Queries) Create(ctx context.Context, arg CreateParams) error {
 		arg.Name,
 		arg.Owner,
 		arg.ContentType,
-		arg.Size,
-		arg.UploadDate,
-		arg.StoragePath,
+		arg.FilePath,
+		arg.ThumbPath,
 	)
 	return err
 }
@@ -53,7 +52,7 @@ func (q *Queries) Delete(ctx context.Context, id uuid.UUID) error {
 }
 
 const get = `-- name: Get :one
-SELECT id, name, owner, content_type, size, upload_date, storage_path FROM files 
+SELECT id, name, owner, content_type, file_path, thumb_path FROM files 
 WHERE id = ? LIMIT 1
 `
 
@@ -65,15 +64,14 @@ func (q *Queries) Get(ctx context.Context, id uuid.UUID) (File, error) {
 		&i.Name,
 		&i.Owner,
 		&i.ContentType,
-		&i.Size,
-		&i.UploadDate,
-		&i.StoragePath,
+		&i.FilePath,
+		&i.ThumbPath,
 	)
 	return i, err
 }
 
 const getAll = `-- name: GetAll :many
-SELECT id, name, owner, content_type, size, upload_date, storage_path FROM files 
+SELECT id, name, owner, content_type, file_path, thumb_path FROM files 
 ORDER BY upload_date
 `
 
@@ -91,9 +89,8 @@ func (q *Queries) GetAll(ctx context.Context) ([]File, error) {
 			&i.Name,
 			&i.Owner,
 			&i.ContentType,
-			&i.Size,
-			&i.UploadDate,
-			&i.StoragePath,
+			&i.FilePath,
+			&i.ThumbPath,
 		); err != nil {
 			return nil, err
 		}

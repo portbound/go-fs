@@ -9,10 +9,9 @@ type FileMeta struct {
 	Name         string    `json:"name"`
 	Owner        string    `json:"owner"`
 	ContentType  string    `json:"type"`
-	Size         int64     `json:"size"`
 	FilePath     string    `json:"file-path"`
 	TmpFilePath  string    `json:"tmp-file"`
-	Thumbnail    string    `json:"thumbnail-path"`
-	TmpThumbPath string    `json:"tmp-file-thumb"`
+	ThumbPath    string    `json:"thumb-path"`
+	TmpThumbPath string    `json:"tmp-thumb"`
 	PreviewPath  string    `json:"preview-path"`
 }

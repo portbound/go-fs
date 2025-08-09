@@ -1,6 +1,8 @@
 package sqlite_test
 
 import (
+	"context"
+	"database/sql"
 	"reflect"
 	"testing"
 
@@ -9,100 +11,65 @@ import (
 	"github.com/portbound/go-fs/internal/models"
 )
 
-func TestDB_Create(t *testing.T) {
-	db, err := sqlite.NewDB("file::memory:?cache=shared")
-	if err != nil {
-		t.Fatalf("could not construct receiver type: %v", err)
-	}
-	tests := []struct {
-		name     string
-		filemeta *models.FileMeta
-		wantErr  bool
-	}{
-		{
-			name:     "happy-path",
-			filemeta: seedFilemeta(t),
-			wantErr:  false,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-
-			t.Cleanup(func() {
-
-			})
-
-			gotErr := db.Create(t.Context(), tt.filemeta)
-			if gotErr != nil {
-				if !tt.wantErr {
-					t.Errorf("Create() failed: %v", gotErr)
-				}
-				return
-			}
-			if tt.wantErr {
-				t.Fatal("Create() succeeded unexpectedly")
-			}
-		})
-	}
-}
-
-func TestDB_Get(t *testing.T) {
-	db, err := sqlite.NewDB("file::memory:?cache=shared")
+func TestFileMetadataRepository(t *testing.T) {
+	db, err := sqlite.NewDB(":memory:")
 	if err != nil {
 		t.Fatalf("could not construct receiver type: %v", err)
 	}
 
-	tests := []struct {
-		name    string
-		connStr string
-		want    *models.FileMeta
-		wantErr bool
-	}{
-		{
-			name:    "happy-path",
-			connStr: "file::memory:?cache=shared",
-			want:    seedFilemeta(t),
-			wantErr: false,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if err := db.Create(t.Context(), tt.want); err != nil {
-				t.Errorf("Get() failed to seed db: %v", err)
-			}
-
-			got, gotErr := db.Get(t.Context(), tt.want.ID)
-			if gotErr != nil {
-				if !tt.wantErr {
-					t.Errorf("Get() failed: %v", gotErr)
-				}
-				return
-			}
-			if tt.wantErr {
-				t.Fatal("Get() succeeded unexpectedly")
-			}
-			// TODO: update the condition below to compare got with tt.want.
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("Get() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func seedFilemeta(t *testing.T) *models.FileMeta {
-	t.Helper()
-	return &models.FileMeta{
+	fm := &models.FileMeta{
 		ID:          uuid.New(),
 		Name:        "test.txt",
-		Owner:       "tester",
-		ContentType: "plain/text",
-		Size:        10,
-		FilePath:    "test-path",
-		TmpFilePath: "test-dir",
+		Owner:       "test-owner",
+		ContentType: "text/plain",
+		FilePath:    "/test.txt",
+		ThumbPath:   "/thumb.jpg",
 	}
-}
 
-func resetTables(t *testing.T) error {
+	t.Run("Create", func(t *testing.T) {
+		err := db.Create(context.Background(), fm)
+		if err != nil {
+			t.Fatalf("Create() failed: %v", err)
+		}
 
-	return nil
+		got, err := db.Get(context.Background(), fm.ID)
+		if err != nil {
+			t.Fatalf("Get() after Create() failed: %v", err)
+		}
+
+		// these fields are not part of the DB schema for file metadata so we set them to their zero value before comparison
+		fm.TmpFilePath = ""
+		fm.TmpThumbPath = ""
+		fm.PreviewPath = ""
+
+		if !reflect.DeepEqual(got, fm) {
+			t.Errorf("Get() after Create() = %v, want %v", got, fm)
+		}
+	})
+
+	t.Run("Get", func(t *testing.T) {
+		got, err := db.Get(context.Background(), fm.ID)
+		if err != nil {
+			t.Fatalf("Get() failed: %v", err)
+		}
+
+		if !reflect.DeepEqual(got, fm) {
+			t.Errorf("Get() = %v, want %v", got, fm)
+		}
+	})
+
+	t.Run("Delete", func(t *testing.T) {
+		err := db.Delete(context.Background(), fm.ID)
+		if err != nil {
+			t.Fatalf("Delete() failed: %v", err)
+		}
+
+		_, err = db.Get(context.Background(), fm.ID)
+		if err == nil {
+			t.Fatal("Get() after Delete() succeeded unexpectedly")
+		}
+		if err != sql.ErrNoRows {
+			t.Fatalf("expected sql.ErrNoRows but got: %v", err)
+		}
+	})
 }

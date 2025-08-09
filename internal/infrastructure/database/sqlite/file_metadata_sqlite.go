@@ -47,8 +47,8 @@ func (db *DB) Create(ctx context.Context, filemeta *models.FileMeta) error {
 		Name:        filemeta.Name,
 		Owner:       filemeta.Owner,
 		ContentType: filemeta.ContentType,
-		Size:        filemeta.Size,
-		StoragePath: filemeta.FilePath,
+		FilePath:    filemeta.FilePath,
+		ThumbPath:   sql.NullString{String: filemeta.ThumbPath, Valid: true},
 	}
 	return db.Queries.Create(ctx, params)
 }
@@ -88,7 +88,7 @@ func mapToFile(f File) (*models.FileMeta, error) {
 		Name:        f.Name,
 		Owner:       f.Owner,
 		ContentType: f.ContentType,
-		Size:        f.Size,
-		FilePath:    f.StoragePath,
+		FilePath:    f.FilePath,
+		ThumbPath:   f.ThumbPath.String,
 	}, nil
 }
