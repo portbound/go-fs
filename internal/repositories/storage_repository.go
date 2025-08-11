@@ -4,11 +4,12 @@ import (
 	"context"
 	"io"
 
-	"github.com/portbound/go-fs/internal/models"
+	"cloud.google.com/go/storage"
 )
 
 type StorageRepository interface {
-	Upload(ctx context.Context, path string) error
-	Download(ctx context.Context, fm *models.FileMeta) (io.ReadCloser, error)
+	Upload(ctx context.Context, name string, path string) error
+	Download(ctx context.Context, fileName string) (io.ReadCloser, error)
+	ListObjects(ctx context.Context, query *storage.Query) ([]string, error)
 	Delete(ctx context.Context, fileName string) error
 }

@@ -30,7 +30,8 @@ func main() {
 		log.Fatalf("failed to create storage repository: %v", err)
 	}
 
-	fileService := services.NewFileService(fileRepo, storageRepo, cfg.TmpDir)
+	thumbnailer := services.NewThumbnailService()
+	fileService := services.NewFileService(fileRepo, storageRepo, thumbnailer, cfg.TmpDir)
 	fileHandler := handlers.NewFileHandler(fileService)
 
 	mux := http.NewServeMux()

@@ -25,14 +25,14 @@ func NewFileHandler(fs *services.FileService) *FileHandler {
 }
 
 func (h *FileHandler) RegisterRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("POST /files", h.handleFileUpload)
+	mux.HandleFunc("POST /files", h.handleUploadFile)
 	mux.HandleFunc("GET /files/{id}", h.handleGetFile)
-	mux.HandleFunc("GET /files", h.handleGetFiles)
+	mux.HandleFunc("GET /files", h.handleGetFileIds)
 	mux.HandleFunc("DELETE /files/{id}", h.handleDeleteFile)
 	mux.HandleFunc("POST /files/delete-batch", h.handleDeleteBatch)
 }
 
-func (h *FileHandler) handleFileUpload(w http.ResponseWriter, r *http.Request) {
+func (h *FileHandler) handleUploadFile(w http.ResponseWriter, r *http.Request) {
 	_, params, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
 	if err != nil {
 		WriteJSONError(w, http.StatusBadRequest, err.Error())
@@ -53,11 +53,12 @@ func (h *FileHandler) handleFileUpload(w http.ResponseWriter, r *http.Request) {
 
 		if part.FileName() != "" {
 			metadata := models.FileMeta{
+				ID:          uuid.New(),
 				Name:        part.FileName(),
 				ContentType: part.Header.Get("Content-Type"),
 			}
 
-			path, err := utils.StageFileToDisk(r.Context(), h.fileService.TmpStorage, metadata.Name, part)
+			path, err := utils.StageFileToDisk(r.Context(), h.fileService.TmpStorage, metadata.ID.String(), part)
 			if err != nil {
 				WriteJSONError(w, http.StatusInternalServerError, err.Error())
 				return
@@ -107,9 +108,14 @@ func (h *FileHandler) handleGetFile(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h *FileHandler) handleGetFiles(w http.ResponseWriter, r *http.Request) {
-	// query param to filter by date, type, and size? 
-	h.fileService.
+func (h *FileHandler) handleGetFileIds(w http.ResponseWriter, r *http.Request) {
+	fileNames, err := h.fileService.GetThumbnails(r.Context())
+	if err != nil {
+		WriteJSONError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	WriteJSON(w, http.StatusOK, fileNames)
 }
 
 func (h *FileHandler) handleDeleteFile(w http.ResponseWriter, r *http.Request) {
@@ -125,7 +131,7 @@ func (h *FileHandler) handleDeleteFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.fileService.DeleteFile(r.Context(), fm); err != nil {
+	if err := h.fileService.DeleteFile(r.Context(), fm.ID.String()); err != nil {
 		WriteJSONError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
