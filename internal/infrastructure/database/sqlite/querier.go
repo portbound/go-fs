@@ -6,14 +6,12 @@ package sqlite
 
 import (
 	"context"
-
-	"github.com/google/uuid"
 )
 
 type Querier interface {
 	Create(ctx context.Context, arg CreateParams) error
-	Delete(ctx context.Context, id uuid.UUID) error
-	Get(ctx context.Context, id uuid.UUID) (File, error)
+	Delete(ctx context.Context, id string) error
+	Get(ctx context.Context, id string) (File, error)
 	GetAll(ctx context.Context) ([]File, error)
 }
 

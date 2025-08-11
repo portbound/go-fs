@@ -9,6 +9,7 @@ import (
 	"mime"
 	"mime/multipart"
 	"net/http"
+	"path/filepath"
 
 	"github.com/google/uuid"
 	"github.com/portbound/go-fs/internal/models"
@@ -26,7 +27,7 @@ func NewFileHandler(fs *services.FileService) *FileHandler {
 
 func (h *FileHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /files", h.handleUploadFile)
-	mux.HandleFunc("GET /files/{id}", h.handleGetFile)
+	mux.HandleFunc("GET /files/{id}", h.handleDownloadFile)
 	mux.HandleFunc("GET /files", h.handleGetFileIds)
 	mux.HandleFunc("DELETE /files/{id}", h.handleDeleteFile)
 	mux.HandleFunc("POST /files/delete-batch", h.handleDeleteBatch)
@@ -50,22 +51,23 @@ func (h *FileHandler) handleUploadFile(w http.ResponseWriter, r *http.Request) {
 			WriteJSONError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
+		defer part.Close()
 
 		if part.FileName() != "" {
-			metadata := models.FileMeta{
-				ID:          uuid.New(),
-				Name:        part.FileName(),
+			fm := models.FileMeta{
+				ID:          uuid.New().String(),
+				Name:        filepath.Base(part.FileName()),
 				ContentType: part.Header.Get("Content-Type"),
 			}
 
-			path, err := utils.StageFileToDisk(r.Context(), h.fileService.TmpStorage, metadata.ID.String(), part)
+			path, err := utils.StageFileToDisk(r.Context(), h.fileService.TmpStorage, fm.ID, part)
 			if err != nil {
 				WriteJSONError(w, http.StatusInternalServerError, err.Error())
 				return
 			}
 
-			metadata.TmpFilePath = path
-			batch = append(batch, &metadata)
+			fm.TmpFilePath = path
+			batch = append(batch, &fm)
 		}
 	}
 
@@ -85,14 +87,14 @@ func (h *FileHandler) handleUploadFile(w http.ResponseWriter, r *http.Request) {
 	WriteJSON(w, http.StatusOK, nil)
 }
 
-func (h *FileHandler) handleGetFile(w http.ResponseWriter, r *http.Request) {
-	id, err := uuid.Parse(r.PathValue("id"))
+func (h *FileHandler) handleDownloadFile(w http.ResponseWriter, r *http.Request) {
+	fm, err := h.fileService.LookupFileMeta(r.Context(), r.PathValue("id"))
 	if err != nil {
-		WriteJSONError(w, http.StatusBadRequest, err.Error())
+		WriteJSONError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	fm, gcsReader, err := h.fileService.GetFile(r.Context(), id)
+	gcsReader, err := h.fileService.GetFile(r.Context(), fm.ID)
 	if err != nil {
 		WriteJSONError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -125,13 +127,7 @@ func (h *FileHandler) handleDeleteFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fm, err := h.fileService.LookupFileMeta(r.Context(), id)
-	if err != nil {
-		WriteJSONError(w, http.StatusNotFound, err.Error())
-		return
-	}
-
-	if err := h.fileService.DeleteFile(r.Context(), fm.ID.String()); err != nil {
+	if err := h.fileService.DeleteFile(r.Context(), id.String()); err != nil {
 		WriteJSONError(w, http.StatusInternalServerError, err.Error())
 		return
 	}

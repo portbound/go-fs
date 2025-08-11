@@ -22,18 +22,18 @@ func StageFileToDisk(ctx context.Context, path string, fileName string, reader i
 
 	ch := make(chan error, 1)
 	go func() {
-		_, chErr := io.Copy(file, reader)
-		ch <- chErr
+		_, copyErr := io.Copy(file, reader)
+		ch <- copyErr
 	}()
 
 	select {
 	case <-ctx.Done():
-		os.Remove(path)
+		os.Remove(file.Name())
 		return "", ctx.Err()
-	case result := <-ch:
-		if result != nil {
-			os.Remove(path)
-			return "", fmt.Errorf("util.StageFileToDisk: failed to write to tmp file: %w", err)
+	case chanErr := <-ch:
+		if chanErr != nil {
+			os.Remove(file.Name())
+			return "", fmt.Errorf("util.StageFileToDisk: failed to write to tmp file: %w", chanErr)
 		}
 		return file.Name(), nil
 	}

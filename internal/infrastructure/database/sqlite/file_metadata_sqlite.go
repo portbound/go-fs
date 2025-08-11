@@ -7,7 +7,6 @@ import (
 
 	_ "embed"
 
-	"github.com/google/uuid"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/portbound/go-fs/internal/models"
 )
@@ -44,16 +43,15 @@ func NewDB(connStr string) (*DB, error) {
 func (db *DB) Create(ctx context.Context, filemeta *models.FileMeta) error {
 	params := CreateParams{
 		ID:          filemeta.ID,
+		ParentID:    sql.NullString{String: filemeta.ParentID, Valid: true},
 		Name:        filemeta.Name,
 		Owner:       filemeta.Owner,
 		ContentType: filemeta.ContentType,
-		FilePath:    filemeta.FilePath,
-		ThumbPath:   sql.NullString{String: filemeta.ThumbPath, Valid: true},
 	}
 	return db.Queries.Create(ctx, params)
 }
 
-func (db *DB) Get(ctx context.Context, id uuid.UUID) (*models.FileMeta, error) {
+func (db *DB) Get(ctx context.Context, id string) (*models.FileMeta, error) {
 	file, err := db.Queries.Get(ctx, id)
 	if err != nil {
 		return nil, err
@@ -78,17 +76,16 @@ func (db *DB) GetAll(ctx context.Context) ([]*models.FileMeta, error) {
 	return files, nil
 }
 
-func (db *DB) Delete(ctx context.Context, id uuid.UUID) error {
+func (db *DB) Delete(ctx context.Context, id string) error {
 	return db.Queries.Delete(ctx, id)
 }
 
 func mapToFile(f File) (*models.FileMeta, error) {
 	return &models.FileMeta{
 		ID:          f.ID,
+		ParentID:    f.ParentID.String,
 		Name:        f.Name,
 		Owner:       f.Owner,
 		ContentType: f.ContentType,
-		FilePath:    f.FilePath,
-		ThumbPath:   f.ThumbPath.String,
 	}, nil
 }

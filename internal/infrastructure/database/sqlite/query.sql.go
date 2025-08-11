@@ -8,35 +8,31 @@ package sqlite
 import (
 	"context"
 	"database/sql"
-
-	"github.com/google/uuid"
 )
 
 const create = `-- name: Create :exec
 INSERT INTO files (
-	id, name, owner, content_type, file_path, thumb_path
+	id, parent_id, name, content_type, owner
 ) VALUES (
-	?, ?, ?, ?, ?, ?
+	?, ?, ?, ?, ?
 )
 `
 
 type CreateParams struct {
-	ID          uuid.UUID      `json:"id"`
+	ID          string         `json:"id"`
+	ParentID    sql.NullString `json:"parent_id"`
 	Name        string         `json:"name"`
-	Owner       string         `json:"owner"`
 	ContentType string         `json:"content_type"`
-	FilePath    string         `json:"file_path"`
-	ThumbPath   sql.NullString `json:"thumb_path"`
+	Owner       string         `json:"owner"`
 }
 
 func (q *Queries) Create(ctx context.Context, arg CreateParams) error {
 	_, err := q.exec(ctx, q.createStmt, create,
 		arg.ID,
+		arg.ParentID,
 		arg.Name,
-		arg.Owner,
 		arg.ContentType,
-		arg.FilePath,
-		arg.ThumbPath,
+		arg.Owner,
 	)
 	return err
 }
@@ -46,32 +42,31 @@ DELETE FROM files
 WHERE id = ?
 `
 
-func (q *Queries) Delete(ctx context.Context, id uuid.UUID) error {
+func (q *Queries) Delete(ctx context.Context, id string) error {
 	_, err := q.exec(ctx, q.deleteStmt, delete, id)
 	return err
 }
 
 const get = `-- name: Get :one
-SELECT id, name, owner, content_type, file_path, thumb_path FROM files 
+SELECT id, parent_id, name, content_type, owner FROM files 
 WHERE id = ? LIMIT 1
 `
 
-func (q *Queries) Get(ctx context.Context, id uuid.UUID) (File, error) {
+func (q *Queries) Get(ctx context.Context, id string) (File, error) {
 	row := q.queryRow(ctx, q.getStmt, get, id)
 	var i File
 	err := row.Scan(
 		&i.ID,
+		&i.ParentID,
 		&i.Name,
-		&i.Owner,
 		&i.ContentType,
-		&i.FilePath,
-		&i.ThumbPath,
+		&i.Owner,
 	)
 	return i, err
 }
 
 const getAll = `-- name: GetAll :many
-SELECT id, name, owner, content_type, file_path, thumb_path FROM files 
+SELECT id, parent_id, name, content_type, owner FROM files 
 ORDER BY upload_date
 `
 
@@ -86,11 +81,10 @@ func (q *Queries) GetAll(ctx context.Context) ([]File, error) {
 		var i File
 		if err := rows.Scan(
 			&i.ID,
+			&i.ParentID,
 			&i.Name,
-			&i.Owner,
 			&i.ContentType,
-			&i.FilePath,
-			&i.ThumbPath,
+			&i.Owner,
 		); err != nil {
 			return nil, err
 		}
