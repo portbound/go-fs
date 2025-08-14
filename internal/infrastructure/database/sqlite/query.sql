@@ -1,8 +1,8 @@
 -- name: Create :exec
 INSERT INTO files (
-	id, parent_id, name, content_type, owner
+	id, parent_id, thumb_id, name, content_type, owner
 ) VALUES (
-	?, ?, ?, ?, ?
+	?, ?, ?, ?, ?, ?
 );
 	 
 -- name: Get :one

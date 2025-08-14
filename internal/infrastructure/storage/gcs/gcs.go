@@ -35,7 +35,6 @@ func (g *GCSStorage) Upload(ctx context.Context, name string, path string) error
 	ctx, cancel := context.WithTimeout(ctx, time.Second*180)
 	defer cancel()
 
-	// fileName := filepath.Base(fm.TmpFilePath)
 	obj := g.client.Bucket(g.bkt).Object(name)
 	obj = obj.If(storage.Conditions{DoesNotExist: true})
 	wc := obj.NewWriter(ctx)

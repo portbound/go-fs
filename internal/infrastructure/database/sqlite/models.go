@@ -11,6 +11,7 @@ import (
 type File struct {
 	ID          string         `json:"id"`
 	ParentID    sql.NullString `json:"parent_id"`
+	ThumbID     sql.NullString `json:"thumb_id"`
 	Name        string         `json:"name"`
 	ContentType string         `json:"content_type"`
 	Owner       string         `json:"owner"`

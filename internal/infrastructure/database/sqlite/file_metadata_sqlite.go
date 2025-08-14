@@ -44,6 +44,7 @@ func (db *DB) Create(ctx context.Context, filemeta *models.FileMeta) error {
 	params := CreateParams{
 		ID:          filemeta.ID,
 		ParentID:    sql.NullString{String: filemeta.ParentID, Valid: true},
+		ThumbID:     sql.NullString{String: filemeta.ThumbID, Valid: true},
 		Name:        filemeta.Name,
 		Owner:       filemeta.Owner,
 		ContentType: filemeta.ContentType,
@@ -84,6 +85,7 @@ func mapToFile(f File) (*models.FileMeta, error) {
 	return &models.FileMeta{
 		ID:          f.ID,
 		ParentID:    f.ParentID.String,
+		ThumbID:     f.ThumbID.String,
 		Name:        f.Name,
 		Owner:       f.Owner,
 		ContentType: f.ContentType,
