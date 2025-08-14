@@ -58,6 +58,12 @@ func (fs *FileService) ProcessBatch(ctx context.Context, batch []*models.FileMet
 				}
 				fm.ThumbID = tfm.ID
 
+				tfm.TmpFilePath, err = utils.StageFileToDisk(ctx, fs.TmpStorage, tfm.ID, thumbnailReader)
+				if err != nil {
+					ch <- fmt.Errorf("services.Processbatch: failed to stage thumbnail for %s to disk: %w", fm.Name, err)
+				}
+				defer os.Remove(tfm.TmpFilePath)
+
 				if err = fs.processFile(ctx, tfm, thumbnailReader); err != nil {
 					ch <- fmt.Errorf("services.ProcessBatch: failed to process thumbnail for %s: %w", fm.Name, err)
 					return
@@ -150,27 +156,27 @@ func (fs *FileService) DeleteFileMeta(ctx context.Context, id string) error {
 }
 
 func (fs *FileService) processFile(ctx context.Context, fm *models.FileMeta, fileReader io.Reader) error {
-	if fileReader != nil {
-		path, err := utils.StageFileToDisk(ctx, fs.TmpStorage, fm.ID, fileReader)
-		if err != nil {
-			return fmt.Errorf("services.Processbatch: failed to stage thumbnail for %s to disk: %w", fm.Name, err)
-		}
-		fm.TmpFilePath = path
-		defer os.Remove(fm.TmpFilePath)
-
-		if err := fs.storage.Upload(ctx, fm.ID, fm.TmpFilePath); err != nil {
-			return fmt.Errorf("upload failed for %s: %w", fm.Name, err)
-		}
-
-		if err := fs.saveFileMeta(ctx, fm); err != nil {
-			if rbErr := fs.DeleteFile(ctx, fm.ID); rbErr != nil {
-				// TODO replace w proper logging
-				fmt.Printf("CRITICAL: failed to delete orphaned file %s from storage: %v", fm.Name, rbErr)
-				return fmt.Errorf("CRITICAL: failed to delete orphaned file %s from storage: %w", fm.Name, rbErr)
-			}
-			return fmt.Errorf("save metadata failed for %s: %w", fm.Name, err)
-		}
+	// if fileReader != nil {
+	// 	path, err := utils.StageFileToDisk(ctx, fs.TmpStorage, fm.ID, fileReader)
+	// 	if err != nil {
+	// 		return fmt.Errorf("services.Processbatch: failed to stage thumbnail for %s to disk: %w", fm.Name, err)
+	// 	}
+	// 	fm.TmpFilePath = path
+	// 	defer os.Remove(fm.TmpFilePath)
+	//
+	if err := fs.storage.Upload(ctx, fm.ID, fm.TmpFilePath); err != nil {
+		return fmt.Errorf("upload failed for %s: %w", fm.Name, err)
 	}
+
+	if err := fs.saveFileMeta(ctx, fm); err != nil {
+		if rbErr := fs.DeleteFile(ctx, fm.ID); rbErr != nil {
+			// TODO replace w proper logging
+			fmt.Printf("CRITICAL: failed to delete orphaned file %s from storage: %v", fm.Name, rbErr)
+			return fmt.Errorf("CRITICAL: failed to delete orphaned file %s from storage: %w", fm.Name, rbErr)
+		}
+		return fmt.Errorf("save metadata failed for %s: %w", fm.Name, err)
+	}
+	// }
 
 	return nil
 }
