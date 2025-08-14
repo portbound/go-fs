@@ -31,7 +31,7 @@ func main() {
 	}
 
 	thumbnailer := services.NewThumbnailService()
-	fileService := services.NewFileService(fileRepo, storageRepo, thumbnailer, cfg.TmpDir)
+	fileService := services.NewFileService(fileRepo, storageRepo, thumbnailer, cfg.TmpStorage)
 	fileHandler := handlers.NewFileHandler(fileService)
 
 	mux := http.NewServeMux()

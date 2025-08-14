@@ -13,7 +13,7 @@ type Config struct {
 	DatabaseENG     string
 	StorageProvider string
 	BucketName      string
-	TmpDir          string
+	TmpStorage      string
 }
 
 func Load() (*Config, error) {
@@ -28,7 +28,7 @@ func Load() (*Config, error) {
 		DatabaseENG:     os.Getenv("DATABASE_ENG"),
 		StorageProvider: os.Getenv("STORAGE_PROVIDER"),
 		BucketName:      os.Getenv("BUCKET_NAME"),
-		TmpDir:          os.Getenv("TMP_DIR"),
+		TmpStorage:      os.Getenv("TMP_DIR"),
 	}
 
 	if cfg.ServerPort == "" {
@@ -51,7 +51,7 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("BUCKET_NAME is required but was undefined")
 	}
 
-	if cfg.TmpDir == "" {
+	if cfg.TmpStorage == "" {
 		return nil, fmt.Errorf("TMP_DIR is required but was undefined")
 	}
 
