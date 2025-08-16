@@ -12,20 +12,20 @@ import (
 	"google.golang.org/api/iterator"
 )
 
-type GCSStorage struct {
+type Storage struct {
 	client *storage.Client
 	bkt    string
 }
 
-func NewGCSStorage(ctx context.Context, bkt string) (*GCSStorage, error) {
+func NewStorage(ctx context.Context, bkt string) (*Storage, error) {
 	client, err := storage.NewClient(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return &GCSStorage{client: client, bkt: bkt}, nil
+	return &Storage{client: client, bkt: bkt}, nil
 }
 
-func (g *GCSStorage) Upload(ctx context.Context, name string, path string) error {
+func (s *Storage) Upload(ctx context.Context, name string, path string) error {
 	src, err := os.Open(path)
 	if err != nil {
 		return fmt.Errorf("gcs.Upload: failed to open file %s: %w", path, err)
@@ -35,7 +35,7 @@ func (g *GCSStorage) Upload(ctx context.Context, name string, path string) error
 	ctx, cancel := context.WithTimeout(ctx, time.Second*180)
 	defer cancel()
 
-	obj := g.client.Bucket(g.bkt).Object(name)
+	obj := s.client.Bucket(s.bkt).Object(name)
 	obj = obj.If(storage.Conditions{DoesNotExist: true})
 	wc := obj.NewWriter(ctx)
 
@@ -49,8 +49,8 @@ func (g *GCSStorage) Upload(ctx context.Context, name string, path string) error
 	return nil
 }
 
-func (g *GCSStorage) Download(ctx context.Context, fileName string) (io.ReadCloser, error) {
-	obj := g.client.Bucket(g.bkt).Object(fileName)
+func (s *Storage) Download(ctx context.Context, fileName string) (io.ReadCloser, error) {
+	obj := s.client.Bucket(s.bkt).Object(fileName)
 
 	r, err := obj.NewReader(ctx)
 	if err != nil {
@@ -60,8 +60,8 @@ func (g *GCSStorage) Download(ctx context.Context, fileName string) (io.ReadClos
 	return r, nil
 }
 
-func (g *GCSStorage) ListObjects(ctx context.Context, query *storage.Query) ([]string, error) {
-	it := g.client.Bucket(g.bkt).Objects(ctx, query)
+func (s *Storage) ListObjects(ctx context.Context, query *storage.Query) ([]string, error) {
+	it := s.client.Bucket(s.bkt).Objects(ctx, query)
 	files := []string{}
 	for {
 		attrs, err := it.Next()
@@ -69,7 +69,7 @@ func (g *GCSStorage) ListObjects(ctx context.Context, query *storage.Query) ([]s
 			if err == iterator.Done {
 				break
 			}
-			return nil, fmt.Errorf("Bucket(%q).Objects: %w", g.bkt, err)
+			return nil, fmt.Errorf("Bucket(%q).Objects: %w", s.bkt, err)
 		}
 
 		files = append(files, attrs.Name)
@@ -78,8 +78,8 @@ func (g *GCSStorage) ListObjects(ctx context.Context, query *storage.Query) ([]s
 	return files, nil
 }
 
-func (g *GCSStorage) Delete(ctx context.Context, id string) error {
-	obj := g.client.Bucket(g.bkt).Object(id)
+func (s *Storage) Delete(ctx context.Context, id string) error {
+	obj := s.client.Bucket(s.bkt).Object(id)
 
 	if err := obj.Delete(ctx); err != nil {
 		return fmt.Errorf("gcs.Delete: failed to delete %s: %w", id, err)

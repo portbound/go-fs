@@ -1,3 +1,4 @@
+// Package sqlite
 package sqlite
 
 import (
@@ -87,7 +88,7 @@ func mapToFile(f File) (*models.FileMeta, error) {
 		ParentID:    f.ParentID.String,
 		ThumbID:     f.ThumbID.String,
 		Name:        f.Name,
-		Owner:       f.Owner,
 		ContentType: f.ContentType,
+		Owner:       f.Owner,
 	}, nil
 }
