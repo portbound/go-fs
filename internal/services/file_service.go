@@ -6,8 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
+	"path/filepath"
+	"strings"
 	"sync"
+	"time"
 
 	"cloud.google.com/go/storage"
 	"github.com/portbound/go-fs/internal/models"
@@ -19,16 +23,30 @@ type FileService struct {
 	db          repositories.FileRepository
 	storage     repositories.StorageRepository
 	thumbnailer *ThumbnailService
-	TmpStorage  string
+	logger      *slog.Logger
+	logFile     io.Closer
+	TmpDir      string
 }
 
-func NewFileService(fileRepo repositories.FileRepository, storageRepo repositories.StorageRepository, thumbnailer *ThumbnailService, tmpStorage string) *FileService {
+func NewFileService(fileRepo repositories.FileRepository, storageRepo repositories.StorageRepository, tmpDir string, logsDir string) (*FileService, error) {
+
+	log, logger, err := setupLogging(logsDir)
+	if err != nil {
+		return nil, fmt.Errorf("NewFileService: failed to setup logging: %w", err)
+	}
+
 	return &FileService{
 		db:          fileRepo,
 		storage:     storageRepo,
-		thumbnailer: thumbnailer,
-		TmpStorage:  tmpStorage,
-	}
+		thumbnailer: NewThumbnailService(),
+		logFile:     log,
+		logger:      logger,
+		TmpDir:      tmpDir,
+	}, nil
+}
+
+func (fs *FileService) CloseLog() error {
+	return fs.logFile.Close()
 }
 
 func (fs *FileService) ProcessBatch(ctx context.Context, batch []*models.FileMeta) []error {
@@ -41,32 +59,37 @@ func (fs *FileService) ProcessBatch(ctx context.Context, batch []*models.FileMet
 		go func() {
 			defer wg.Done()
 
-			thumbnailReader, err := fs.thumbnailer.Generate(ctx, fm)
-			if err != nil {
-				ch <- fmt.Errorf("services.ProcessBatch: failed to generate thumbnail for '%s': %w", fm.Name, err)
-				return
-			}
-
-			if thumbnailReader != nil {
-				tfm := &models.FileMeta{
-					ID:          fmt.Sprintf("thumb-%s", fm.ID),
-					ParentID:    fm.ID,
-					ThumbID:     "",
-					Name:        fmt.Sprintf("thumb-%s", fm.Name),
-					ContentType: "image/jpeg",
-					Owner:       fm.Owner,
-				}
-				fm.ThumbID = tfm.ID
-
-				tfm.TmpFilePath, err = utils.StageFileToDisk(ctx, fs.TmpStorage, tfm.ID, thumbnailReader)
+			t := strings.Split(fm.ContentType, "/")
+			if t[0] == "image" || t[0] == "video" {
+				thumbnailReader, err := fs.thumbnailer.Generate(ctx, fm)
 				if err != nil {
-					ch <- fmt.Errorf("services.Processbatch: failed to stage thumbnail for %s to disk: %w", fm.Name, err)
-				}
-				defer os.Remove(tfm.TmpFilePath)
-
-				if err = fs.processFile(ctx, tfm, thumbnailReader); err != nil {
-					ch <- fmt.Errorf("services.ProcessBatch: failed to process thumbnail for %s: %w", fm.Name, err)
+					ch <- fmt.Errorf("services.ProcessBatch: failed to generate thumbnail for '%s': %w", fm.Name, err)
 					return
+				}
+
+				if thumbnailReader != nil {
+					tfm := &models.FileMeta{
+						ID:          fmt.Sprintf("thumb-%s", fm.ID),
+						ParentID:    fm.ID,
+						ThumbID:     "",
+						Name:        fmt.Sprintf("thumb-%s", fm.Name),
+						ContentType: "image/jpeg",
+						Owner:       fm.Owner,
+					}
+					fm.ThumbID = tfm.ID
+
+					tfm.TmpFilePath, err = utils.StageFileToDisk(ctx, fs.TmpDir, tfm.ID, thumbnailReader)
+					if err != nil {
+						ch <- fmt.Errorf("services.Processbatch: failed to stage thumbnail for %s to disk: %w", fm.Name, err)
+					}
+					defer os.Remove(tfm.TmpFilePath)
+
+					if err = fs.processFile(ctx, tfm); err != nil {
+						ch <- fmt.Errorf("services.ProcessBatch: failed to process thumbnail for %s: %w", fm.Name, err)
+						return
+					}
+
+					fs.logger.Info("Thumbnail Upload: Success", "file", fm.Name)
 				}
 			}
 
@@ -77,19 +100,18 @@ func (fs *FileService) ProcessBatch(ctx context.Context, batch []*models.FileMet
 			}
 			defer fileReader.Close()
 
-			if err := fs.processFile(ctx, fm, fileReader); err != nil {
+			if err := fs.processFile(ctx, fm); err != nil {
 				if fm.ThumbID != "" {
 					if err = fs.DeleteFile(ctx, fm.ThumbID); err != nil {
-						e := fmt.Sprintf("CRITICAL services.ProcessBatch: failed to delete orphaned thumbnail %s: %v", fm.ThumbID, err)
-						// TODO replace w proper logging
-						fmt.Println(e)
-						ch <- errors.New(e)
+						fs.logger.Error("Delete File: CRITICAL - Failed to delete orphaned thumbnail", "thumb_id", fm.ThumbID, "error", err)
+						ch <- fmt.Errorf("CRITICAL services.ProcessBatch: failed to delete orphaned thumbnail %s: %v", fm.ThumbID, err)
 					}
 				}
 				ch <- fmt.Errorf("services:ProcessBatch: failed to process %s: %w", fm.Name, err)
 				return
 			}
 
+			fs.logger.Info("File Upload: Success", "file", fm.Name)
 			ch <- nil
 		}()
 	}
@@ -130,6 +152,7 @@ func (fs *FileService) DeleteFile(ctx context.Context, id string) error {
 	if err := fs.storage.Delete(ctx, id); err != nil {
 		return fmt.Errorf("services.DeleteFile: failed to delete %s from storage: %w", id, err)
 	}
+	fs.logger.Info("File Delete: Success", "ID", id)
 	return nil
 }
 
@@ -141,7 +164,7 @@ func (fs *FileService) LookupFileMeta(ctx context.Context, id string) (*models.F
 	return fm, nil
 }
 
-func (fs *FileService) saveFileMeta(ctx context.Context, fm *models.FileMeta) error {
+func (fs *FileService) SaveFileMeta(ctx context.Context, fm *models.FileMeta) error {
 	if err := fs.db.Create(ctx, fm); err != nil {
 		return fmt.Errorf("services.SaveFileMeta: failed to save file metadata: %w", err)
 	}
@@ -155,28 +178,39 @@ func (fs *FileService) DeleteFileMeta(ctx context.Context, id string) error {
 	return nil
 }
 
-func (fs *FileService) processFile(ctx context.Context, fm *models.FileMeta, fileReader io.Reader) error {
-	// if fileReader != nil {
-	// 	path, err := utils.StageFileToDisk(ctx, fs.TmpStorage, fm.ID, fileReader)
-	// 	if err != nil {
-	// 		return fmt.Errorf("services.Processbatch: failed to stage thumbnail for %s to disk: %w", fm.Name, err)
-	// 	}
-	// 	fm.TmpFilePath = path
-	// 	defer os.Remove(fm.TmpFilePath)
-	//
+func (fs *FileService) processFile(ctx context.Context, fm *models.FileMeta) error {
 	if err := fs.storage.Upload(ctx, fm.ID, fm.TmpFilePath); err != nil {
 		return fmt.Errorf("upload failed for %s: %w", fm.Name, err)
 	}
 
-	if err := fs.saveFileMeta(ctx, fm); err != nil {
+	if err := fs.SaveFileMeta(ctx, fm); err != nil {
 		if rbErr := fs.DeleteFile(ctx, fm.ID); rbErr != nil {
-			// TODO replace w proper logging
-			fmt.Printf("CRITICAL: failed to delete orphaned file %s from storage: %v", fm.Name, rbErr)
+			fs.logger.Error("File Upload: CRITICAL - failed to delete orphaned file from storage", "file", fm.Name, "error", rbErr)
 			return fmt.Errorf("CRITICAL: failed to delete orphaned file %s from storage: %w", fm.Name, rbErr)
 		}
 		return fmt.Errorf("save metadata failed for %s: %w", fm.Name, err)
 	}
-	// }
 
 	return nil
+}
+
+func setupLogging(logsDir string) (*os.File, *slog.Logger, error) {
+	var log *os.File
+	logName := fmt.Sprintf("%s-application.log", time.Now().Format("2006-01-02"))
+
+	_, err := os.Stat(logName)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			log, err = os.Create(filepath.Join(logsDir, "application.log"))
+			if err != nil {
+				return nil, nil, fmt.Errorf("fileService.setupLogging: failed to create log file: %w", err)
+			}
+		}
+		if err != nil {
+			return nil, nil, fmt.Errorf("fileService.setupLogging: failed to setup logging: %w", err)
+		}
+	}
+
+	logger := slog.New(slog.NewTextHandler(log, nil))
+	return log, logger, nil
 }

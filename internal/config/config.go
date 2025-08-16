@@ -1,3 +1,4 @@
+// Package config
 package config
 
 import (
@@ -13,7 +14,8 @@ type Config struct {
 	DatabaseENG     string
 	StorageProvider string
 	BucketName      string
-	TmpStorage      string
+	TmpDir          string
+	LogsDir         string
 }
 
 func Load() (*Config, error) {
@@ -28,7 +30,8 @@ func Load() (*Config, error) {
 		DatabaseENG:     os.Getenv("DATABASE_ENG"),
 		StorageProvider: os.Getenv("STORAGE_PROVIDER"),
 		BucketName:      os.Getenv("BUCKET_NAME"),
-		TmpStorage:      os.Getenv("TMP_DIR"),
+		TmpDir:          os.Getenv("TMP_DIR"),
+		LogsDir:         os.Getenv("LOG_DIR"),
 	}
 
 	if cfg.ServerPort == "" {
@@ -51,8 +54,14 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("BUCKET_NAME is required but was undefined")
 	}
 
-	if cfg.TmpStorage == "" {
-		return nil, fmt.Errorf("TMP_DIR is required but was undefined")
+	if cfg.TmpDir == "" {
+		cfg.TmpDir = "./local/tmp"
+		os.Mkdir(cfg.TmpDir, 0755)
+	}
+
+	if cfg.LogsDir == "" {
+		cfg.LogsDir = "./local/logs"
+		os.Mkdir(cfg.LogsDir, 0755)
 	}
 
 	return &cfg, nil

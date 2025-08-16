@@ -22,16 +22,20 @@ func main() {
 
 	fileRepo, err := buildFileRepo(cfg)
 	if err != nil {
-		log.Fatalf("failed to create file repository: %v", err)
+		log.Fatalf("failed to build file repository: %v", err)
 	}
 
 	storageRepo, err := buildStorageRepo(cfg)
 	if err != nil {
-		log.Fatalf("failed to create storage repository: %v", err)
+		log.Fatalf("failed to build storage repository: %v", err)
 	}
 
-	thumbnailer := services.NewThumbnailService()
-	fileService := services.NewFileService(fileRepo, storageRepo, thumbnailer, cfg.TmpStorage)
+	fileService, err := services.NewFileService(fileRepo, storageRepo, cfg.TmpDir, cfg.LogsDir)
+	if err != nil {
+		log.Fatalf("failed to build file service: %v", err)
+	}
+	defer fileService.CloseLog()
+
 	fileHandler := handlers.NewFileHandler(fileService)
 
 	mux := http.NewServeMux()
@@ -56,7 +60,7 @@ func buildStorageRepo(cfg *config.Config) (repositories.StorageRepository, error
 	switch cfg.StorageProvider {
 	case "gcs":
 		ctx := context.Background()
-		return gcs.NewGCSStorage(ctx, cfg.BucketName)
+		return gcs.NewStorage(ctx, cfg.BucketName)
 	default:
 		return nil, fmt.Errorf("unsupported cloud provider: %s", cfg.StorageProvider)
 	}

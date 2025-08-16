@@ -2,6 +2,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -30,7 +31,7 @@ func NewFileHandler(fs *services.FileService) *FileHandler {
 func (h *FileHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /files", h.handleUploadFile)
 	mux.HandleFunc("GET /files/{id}", h.handleDownloadFile)
-	mux.HandleFunc("GET /files", h.handleGetFileIds)
+	mux.HandleFunc("GET /files", h.handleGetThumbnailIDs)
 	mux.HandleFunc("DELETE /files/{id}", h.handleDeleteFile)
 	mux.HandleFunc("POST /files/delete-batch", h.handleDeleteBatch)
 }
@@ -71,7 +72,7 @@ func (h *FileHandler) handleUploadFile(w http.ResponseWriter, r *http.Request) {
 				ParentID:    "",
 				ThumbID:     "",
 				Name:        filepath.Base(part.FileName()),
-				Owner:       "",
+				Owner:       "me",
 				ContentType: part.Header.Get("Content-Type"),
 				TmpFilePath: path,
 			})
@@ -120,7 +121,7 @@ func (h *FileHandler) handleDownloadFile(w http.ResponseWriter, r *http.Request)
 	}
 }
 
-func (h *FileHandler) handleGetFileIds(w http.ResponseWriter, r *http.Request) {
+func (h *FileHandler) handleGetThumbnailIDs(w http.ResponseWriter, r *http.Request) {
 	fileNames, err := h.fileService.GetThumbnails(r.Context())
 	if err != nil {
 		WriteJSONError(w, http.StatusInternalServerError, err.Error())
@@ -131,7 +132,8 @@ func (h *FileHandler) handleGetFileIds(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *FileHandler) handleDeleteFile(w http.ResponseWriter, r *http.Request) {
-	fm, err := h.fileService.LookupFileMeta(r.Context(), r.PathValue("id"))
+	id := r.PathValue("id")
+	fm, err := h.fileService.LookupFileMeta(r.Context(), id)
 	if err != nil {
 		WriteJSONError(w, http.StatusNotFound, err.Error())
 		return
@@ -146,6 +148,11 @@ func (h *FileHandler) handleDeleteFile(w http.ResponseWriter, r *http.Request) {
 		if err := h.fileService.DeleteFile(r.Context(), fm.ThumbID); err != nil {
 			errs = append(errs, fmt.Errorf("services.DeleteFile: failed to delete thumbnail for %s: %v", fm.ID, err))
 		}
+
+		if err := h.fileService.DeleteFileMeta(r.Context(), fm.ThumbID); err != nil {
+			errs = append(errs, fmt.Errorf("services.DeleteFileMeta: failed to delete file meta for %s: %v", fm.ID, err))
+		}
+
 	}
 
 	if err := h.fileService.DeleteFileMeta(r.Context(), fm.ID); err != nil {
@@ -166,39 +173,53 @@ func (h *FileHandler) handleDeleteFile(w http.ResponseWriter, r *http.Request) {
 
 func (h *FileHandler) handleDeleteBatch(w http.ResponseWriter, r *http.Request) {
 	var ids []string
-
 	if err := json.NewDecoder(r.Body).Decode(&ids); err != nil {
 		WriteJSONError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	var wg sync.WaitGroup
-	ch := make(chan error)
+	ch := make(chan error, len(ids))
+	ctx := context.Background()
 	for _, id := range ids {
 		wg.Add(1)
-		go func() {
-			fm, err := h.fileService.LookupFileMeta(r.Context(), id)
+		go func(id string) {
+			fm, err := h.fileService.LookupFileMeta(ctx, id)
 			if err != nil {
 				ch <- fmt.Errorf("services.LookupFileMeta: file not found for id %s: %w", id, err)
 				return
 			}
 
-			if err := h.fileService.DeleteFile(r.Context(), fm.ID); err != nil {
+			if err := h.fileService.DeleteFile(ctx, fm.ID); err != nil {
 				ch <- fmt.Errorf("services.DeleteFile: failed to delete file %s: %v", fm.ID, err)
 			}
 
-			if err := h.fileService.DeleteFileMeta(r.Context(), fm.ID); err != nil {
+			if fm.ThumbID != "" {
+				if err := h.fileService.DeleteFile(ctx, fm.ThumbID); err != nil {
+					ch <- fmt.Errorf("services.DeleteFile: failed to delete thumbnail for %s: %v", fm.ID, err)
+				}
+
+				if err := h.fileService.DeleteFileMeta(ctx, fm.ThumbID); err != nil {
+					ch <- fmt.Errorf("services.DeleteFileMeta: failed to delete file meta for %s: %v", fm.ID, err)
+				}
+			}
+
+			if err := h.fileService.DeleteFileMeta(ctx, fm.ID); err != nil {
 				ch <- fmt.Errorf("services.DeleteFileMeta: failed to delete file meta for %s: %v", fm.ID, err)
 			}
-		}()
+		}(id)
 	}
 
 	go func() {
 		wg.Wait()
 		if len(ch) > 0 {
-			WriteJSON(w, http.StatusMultiStatus, ch)
+			var errMessages []string
+			for err := range ch {
+				errMessages = append(errMessages, err.Error())
+			}
+			WriteJSON(w, http.StatusMultiStatus, errMessages)
+			return
 		}
-		close(ch)
 	}()
 
 	WriteJSON(w, http.StatusNoContent, nil)
