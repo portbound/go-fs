@@ -4,6 +4,7 @@ go 1.24.4
 
 require (
 	cloud.google.com/go/storage v1.55.0
+	github.com/a-h/templ v0.3.943
 	github.com/google/uuid v1.6.0
 	github.com/mattn/go-sqlite3 v1.14.28
 	google.golang.org/api v0.235.0
