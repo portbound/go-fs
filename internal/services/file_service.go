@@ -139,7 +139,7 @@ func (fs *FileService) GetFile(ctx context.Context, id string) (io.ReadCloser, e
 	return gcsReader, nil
 }
 
-func (fs *FileService) GetThumbnails(ctx context.Context) ([]string, error) {
+func (fs *FileService) GetThumbnailIDs(ctx context.Context) ([]string, error) {
 	fileNames, err := fs.storage.ListObjects(ctx, &storage.Query{Prefix: "thumb-"})
 	if err != nil {
 		return nil, fmt.Errorf("services.GetBatch: failed to get fileNames from storage: %w", err)

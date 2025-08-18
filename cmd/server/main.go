@@ -36,10 +36,12 @@ func main() {
 	}
 	defer fileService.CloseLog()
 
-	fileHandler := handlers.NewFileHandler(fileService)
+	apiHandler := handlers.NewAPIHandler(fileService)
+	pageHandler := handlers.NewPageHandler(fileService)
 
 	mux := http.NewServeMux()
-	fileHandler.RegisterRoutes(mux)
+	apiHandler.RegisterRoutes(mux)
+	pageHandler.RegisterRoutes(mux)
 
 	log.Printf("starting server on port %s\n", cfg.ServerPort)
 	if err := http.ListenAndServe(cfg.ServerPort, mux); err != nil {

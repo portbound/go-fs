@@ -20,23 +20,23 @@ import (
 	"github.com/portbound/go-fs/internal/utils"
 )
 
-type FileHandler struct {
-	fileService *services.FileService
+type APIHandler struct {
+	fs *services.FileService
 }
 
-func NewFileHandler(fs *services.FileService) *FileHandler {
-	return &FileHandler{fileService: fs}
+func NewAPIHandler(fs *services.FileService) *APIHandler {
+	return &APIHandler{fs: fs}
 }
 
-func (fh *FileHandler) RegisterRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("POST /files", fh.handleUploadFile)
-	mux.HandleFunc("GET /files/{id}", fh.handleDownloadFile)
-	mux.HandleFunc("GET /files", fh.handleGetThumbnailIDs)
-	mux.HandleFunc("DELETE /files/{id}", fh.handleDeleteFile)
-	mux.HandleFunc("POST /files/delete-batch", fh.handleDeleteBatch)
+func (h *APIHandler) RegisterRoutes(mux *http.ServeMux) {
+	mux.HandleFunc("POST /api/files", h.handleUploadFile)
+	mux.HandleFunc("GET /api/files/{id}", h.handleDownloadFile)
+	mux.HandleFunc("GET /api/files", h.handleGetThumbnailIDs)
+	mux.HandleFunc("DELETE /api/files/{id}", h.handleDeleteFile)
+	mux.HandleFunc("POST /api/files/delete-batch", h.handleDeleteBatch)
 }
 
-func (fh *FileHandler) handleUploadFile(w http.ResponseWriter, r *http.Request) {
+func (h *APIHandler) handleUploadFile(w http.ResponseWriter, r *http.Request) {
 	var errs []error
 	var batch []*models.FileMeta
 
@@ -60,7 +60,7 @@ func (fh *FileHandler) handleUploadFile(w http.ResponseWriter, r *http.Request) 
 
 		if part.FileName() != "" {
 			id := uuid.New().String()
-			path, err := utils.StageFileToDisk(r.Context(), fh.fileService.TmpDir, id, part)
+			path, err := utils.StageFileToDisk(r.Context(), h.fs.TmpDir, id, part)
 			if err != nil {
 				errs = append(errs, fmt.Errorf("handleUploadFile: StageFileToDisk() failed: %v - skipping: %s", err, part.FileName()))
 				continue
@@ -79,7 +79,7 @@ func (fh *FileHandler) handleUploadFile(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
-	batchErrs := fh.fileService.ProcessBatch(r.Context(), batch)
+	batchErrs := h.fs.ProcessBatch(r.Context(), batch)
 	if batchErrs != nil {
 		errs = append(errs, batchErrs...)
 	}
@@ -98,14 +98,14 @@ func (fh *FileHandler) handleUploadFile(w http.ResponseWriter, r *http.Request) 
 	WriteJSON(w, http.StatusCreated, nil)
 }
 
-func (fh *FileHandler) handleDownloadFile(w http.ResponseWriter, r *http.Request) {
-	fm, err := fh.fileService.LookupFileMeta(r.Context(), r.PathValue("id"))
+func (h *APIHandler) handleDownloadFile(w http.ResponseWriter, r *http.Request) {
+	fm, err := h.fs.LookupFileMeta(r.Context(), r.PathValue("id"))
 	if err != nil {
 		WriteJSONError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	gcsReader, err := fh.fileService.GetFile(r.Context(), fm.ID)
+	gcsReader, err := h.fs.GetFile(r.Context(), fm.ID)
 	if err != nil {
 		WriteJSONError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -121,8 +121,8 @@ func (fh *FileHandler) handleDownloadFile(w http.ResponseWriter, r *http.Request
 	}
 }
 
-func (fh *FileHandler) handleGetThumbnailIDs(w http.ResponseWriter, r *http.Request) {
-	fileNames, err := fh.fileService.GetThumbnails(r.Context())
+func (h *APIHandler) handleGetThumbnailIDs(w http.ResponseWriter, r *http.Request) {
+	fileNames, err := h.fs.GetThumbnailIDs(r.Context())
 	if err != nil {
 		WriteJSONError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -131,31 +131,31 @@ func (fh *FileHandler) handleGetThumbnailIDs(w http.ResponseWriter, r *http.Requ
 	WriteJSON(w, http.StatusOK, fileNames)
 }
 
-func (fh *FileHandler) handleDeleteFile(w http.ResponseWriter, r *http.Request) {
+func (h *APIHandler) handleDeleteFile(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	fm, err := fh.fileService.LookupFileMeta(r.Context(), id)
+	fm, err := h.fs.LookupFileMeta(r.Context(), id)
 	if err != nil {
 		WriteJSONError(w, http.StatusNotFound, err.Error())
 		return
 	}
 
 	var errs []error
-	if err := fh.fileService.DeleteFile(r.Context(), fm.ID); err != nil {
+	if err := h.fs.DeleteFile(r.Context(), fm.ID); err != nil {
 		errs = append(errs, fmt.Errorf("services.DeleteFile: failed to delete file %s: %v", fm.ID, err))
 	}
 
 	if fm.ThumbID != "" {
-		if err := fh.fileService.DeleteFile(r.Context(), fm.ThumbID); err != nil {
+		if err := h.fs.DeleteFile(r.Context(), fm.ThumbID); err != nil {
 			errs = append(errs, fmt.Errorf("services.DeleteFile: failed to delete thumbnail for %s: %v", fm.ID, err))
 		}
 
-		if err := fh.fileService.DeleteFileMeta(r.Context(), fm.ThumbID); err != nil {
+		if err := h.fs.DeleteFileMeta(r.Context(), fm.ThumbID); err != nil {
 			errs = append(errs, fmt.Errorf("services.DeleteFileMeta: failed to delete file meta for %s: %v", fm.ID, err))
 		}
 
 	}
 
-	if err := fh.fileService.DeleteFileMeta(r.Context(), fm.ID); err != nil {
+	if err := h.fs.DeleteFileMeta(r.Context(), fm.ID); err != nil {
 		errs = append(errs, fmt.Errorf("services.DeleteFileMeta: failed to delete file meta for %s: %v", fm.ID, err))
 	}
 
@@ -171,7 +171,7 @@ func (fh *FileHandler) handleDeleteFile(w http.ResponseWriter, r *http.Request) 
 	WriteJSON(w, http.StatusNoContent, nil)
 }
 
-func (fh *FileHandler) handleDeleteBatch(w http.ResponseWriter, r *http.Request) {
+func (h *APIHandler) handleDeleteBatch(w http.ResponseWriter, r *http.Request) {
 	var ids []string
 	if err := json.NewDecoder(r.Body).Decode(&ids); err != nil {
 		WriteJSONError(w, http.StatusBadRequest, err.Error())
@@ -184,27 +184,27 @@ func (fh *FileHandler) handleDeleteBatch(w http.ResponseWriter, r *http.Request)
 	for _, id := range ids {
 		wg.Add(1)
 		go func(id string) {
-			fm, err := fh.fileService.LookupFileMeta(ctx, id)
+			fm, err := h.fs.LookupFileMeta(ctx, id)
 			if err != nil {
 				ch <- fmt.Errorf("services.LookupFileMeta: file not found for id %s: %w", id, err)
 				return
 			}
 
-			if err := fh.fileService.DeleteFile(ctx, fm.ID); err != nil {
+			if err := h.fs.DeleteFile(ctx, fm.ID); err != nil {
 				ch <- fmt.Errorf("services.DeleteFile: failed to delete file %s: %v", fm.ID, err)
 			}
 
 			if fm.ThumbID != "" {
-				if err := fh.fileService.DeleteFile(ctx, fm.ThumbID); err != nil {
+				if err := h.fs.DeleteFile(ctx, fm.ThumbID); err != nil {
 					ch <- fmt.Errorf("services.DeleteFile: failed to delete thumbnail for %s: %v", fm.ID, err)
 				}
 
-				if err := fh.fileService.DeleteFileMeta(ctx, fm.ThumbID); err != nil {
+				if err := h.fs.DeleteFileMeta(ctx, fm.ThumbID); err != nil {
 					ch <- fmt.Errorf("services.DeleteFileMeta: failed to delete file meta for %s: %v", fm.ID, err)
 				}
 			}
 
-			if err := fh.fileService.DeleteFileMeta(ctx, fm.ID); err != nil {
+			if err := h.fs.DeleteFileMeta(ctx, fm.ID); err != nil {
 				ch <- fmt.Errorf("services.DeleteFileMeta: failed to delete file meta for %s: %v", fm.ID, err)
 			}
 		}(id)
