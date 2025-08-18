@@ -20,12 +20,12 @@ func main() {
 		log.Fatalf("failed to load config: %v", err)
 	}
 
-	fileRepo, err := buildFileRepo(cfg)
+	fileRepo, err := buildFileRepo(cfg.DatabaseENG, cfg.DatabaseURL)
 	if err != nil {
 		log.Fatalf("failed to build file repository: %v", err)
 	}
 
-	storageRepo, err := buildStorageRepo(cfg)
+	storageRepo, err := buildStorageRepo(cfg.StorageProvider, cfg.BucketName)
 	if err != nil {
 		log.Fatalf("failed to build storage repository: %v", err)
 	}
@@ -37,11 +37,9 @@ func main() {
 	defer fileService.CloseLog()
 
 	apiHandler := handlers.NewAPIHandler(fileService)
-	pageHandler := handlers.NewPageHandler(fileService)
 
 	mux := http.NewServeMux()
 	apiHandler.RegisterRoutes(mux)
-	pageHandler.RegisterRoutes(mux)
 
 	log.Printf("starting server on port %s\n", cfg.ServerPort)
 	if err := http.ListenAndServe(cfg.ServerPort, mux); err != nil {
@@ -49,21 +47,21 @@ func main() {
 	}
 }
 
-func buildFileRepo(cfg *config.Config) (repositories.FileRepository, error) {
-	switch cfg.DatabaseENG {
+func buildFileRepo(dbEngine, dbURL string) (repositories.FileRepository, error) {
+	switch dbEngine {
 	case "sqlite":
-		return sqlite.NewDB(cfg.DatabaseURL)
+		return sqlite.NewDB(dbURL)
 	default:
-		return nil, fmt.Errorf("unsupported database engine: %s", cfg.DatabaseENG)
+		return nil, fmt.Errorf("unsupported database engine: %s", dbEngine)
 	}
 }
 
-func buildStorageRepo(cfg *config.Config) (repositories.StorageRepository, error) {
-	switch cfg.StorageProvider {
+func buildStorageRepo(storageProvider, bucket string) (repositories.StorageRepository, error) {
+	switch storageProvider {
 	case "gcs":
 		ctx := context.Background()
-		return gcs.NewStorage(ctx, cfg.BucketName)
+		return gcs.NewStorage(ctx, bucket)
 	default:
-		return nil, fmt.Errorf("unsupported cloud provider: %s", cfg.StorageProvider)
+		return nil, fmt.Errorf("unsupported cloud provider: %s", storageProvider)
 	}
 }
