@@ -90,11 +90,9 @@ func (h *APIHandler) handleUploadFile(w http.ResponseWriter, r *http.Request) {
 		for _, err := range errs {
 			errMessages = append(errMessages, err.Error())
 		}
-
 		WriteJSON(w, http.StatusMultiStatus, errMessages)
 		return
 	}
-
 	WriteJSON(w, http.StatusCreated, nil)
 }
 
@@ -127,34 +125,30 @@ func (h *APIHandler) handleGetThumbnailIDs(w http.ResponseWriter, r *http.Reques
 		WriteJSONError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-
 	WriteJSON(w, http.StatusOK, fileNames)
 }
 
 func (h *APIHandler) handleDeleteFile(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-	fm, err := h.fs.LookupFileMeta(r.Context(), id)
+	var errs []error
+
+	fm, err := h.fs.LookupFileMeta(r.Context(), r.PathValue("id"))
 	if err != nil {
 		WriteJSONError(w, http.StatusNotFound, err.Error())
 		return
-	}
-
-	var errs []error
-	if err := h.fs.DeleteFile(r.Context(), fm.ID); err != nil {
-		errs = append(errs, fmt.Errorf("services.DeleteFile: failed to delete file %s: %v", fm.ID, err))
 	}
 
 	if fm.ThumbID != "" {
 		if err := h.fs.DeleteFile(r.Context(), fm.ThumbID); err != nil {
 			errs = append(errs, fmt.Errorf("services.DeleteFile: failed to delete thumbnail for %s: %v", fm.ID, err))
 		}
-
 		if err := h.fs.DeleteFileMeta(r.Context(), fm.ThumbID); err != nil {
 			errs = append(errs, fmt.Errorf("services.DeleteFileMeta: failed to delete file meta for %s: %v", fm.ID, err))
 		}
-
 	}
 
+	if err := h.fs.DeleteFile(r.Context(), fm.ID); err != nil {
+		errs = append(errs, fmt.Errorf("services.DeleteFile: failed to delete file %s: %v", fm.ID, err))
+	}
 	if err := h.fs.DeleteFileMeta(r.Context(), fm.ID); err != nil {
 		errs = append(errs, fmt.Errorf("services.DeleteFileMeta: failed to delete file meta for %s: %v", fm.ID, err))
 	}
@@ -167,7 +161,6 @@ func (h *APIHandler) handleDeleteFile(w http.ResponseWriter, r *http.Request) {
 		WriteJSON(w, http.StatusMultiStatus, errMessages)
 		return
 	}
-
 	WriteJSON(w, http.StatusNoContent, nil)
 }
 
@@ -190,20 +183,18 @@ func (h *APIHandler) handleDeleteBatch(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 
-			if err := h.fs.DeleteFile(ctx, fm.ID); err != nil {
-				ch <- fmt.Errorf("services.DeleteFile: failed to delete file %s: %v", fm.ID, err)
-			}
-
 			if fm.ThumbID != "" {
 				if err := h.fs.DeleteFile(ctx, fm.ThumbID); err != nil {
 					ch <- fmt.Errorf("services.DeleteFile: failed to delete thumbnail for %s: %v", fm.ID, err)
 				}
-
 				if err := h.fs.DeleteFileMeta(ctx, fm.ThumbID); err != nil {
 					ch <- fmt.Errorf("services.DeleteFileMeta: failed to delete file meta for %s: %v", fm.ID, err)
 				}
 			}
 
+			if err := h.fs.DeleteFile(ctx, fm.ID); err != nil {
+				ch <- fmt.Errorf("services.DeleteFile: failed to delete file %s: %v", fm.ID, err)
+			}
 			if err := h.fs.DeleteFileMeta(ctx, fm.ID); err != nil {
 				ch <- fmt.Errorf("services.DeleteFileMeta: failed to delete file meta for %s: %v", fm.ID, err)
 			}
@@ -221,6 +212,5 @@ func (h *APIHandler) handleDeleteBatch(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}()
-
 	WriteJSON(w, http.StatusNoContent, nil)
 }
