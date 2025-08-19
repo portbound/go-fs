@@ -1,0 +1,15 @@
+package components
+
+import "fmt"
+
+templ ShowGallery(ids []string) {
+	<div id="gallery" class="grid grid-cols-10 gap-4">
+		for _, id := range ids {
+			<img
+				src={ templ.URL(fmt.Sprintf("/files/%s", id)) }
+				alt={ fmt.Sprintf("thumbnail-%s", id) }
+				class="rounded-lg shadow-md"
+			/>
+		}
+	</div>
+}
