@@ -1,0 +1,20 @@
+package layouts
+
+import "github.com/portbound/go-fs/internal/templates/components/popover"
+
+templ Base(title string) {
+	<!DOCTYPE html>
+	<html>
+		<head>
+			<title>{ title }</title>
+			<script src="https://cdn.tailwindcss.com"></script>
+			<script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.6/dist/htmx.min.js" integrity="sha384-Akqfrbj/HpNVo8k11SXBb6TlBWmXXlYQrCSqEWmyKJe+hDm3Z/B2WVG4smwBkRVm" crossorigin="anonymous"></script>
+			@popover.Script()
+		</head>
+		<body class="bg-slate-700">
+			<main>
+				{ children... }
+			</main>
+		</body>
+	</html>
+}

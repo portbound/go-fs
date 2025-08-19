@@ -17,26 +17,28 @@ import (
 	"github.com/google/uuid"
 	"github.com/portbound/go-fs/internal/models"
 	"github.com/portbound/go-fs/internal/services"
+	"github.com/portbound/go-fs/internal/templates"
+	"github.com/portbound/go-fs/internal/templates/components"
 	"github.com/portbound/go-fs/internal/utils"
 )
 
-type APIHandler struct {
+type WebHandler struct {
 	fs *services.FileService
 }
 
-func NewAPIHandler(fs *services.FileService) *APIHandler {
-	return &APIHandler{fs: fs}
+func NewWebHandler(fs *services.FileService) *WebHandler {
+	return &WebHandler{fs: fs}
 }
 
-func (h *APIHandler) RegisterRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("POST /api/files", h.handleUploadFile)
-	mux.HandleFunc("GET /api/files/{id}", h.handleDownloadFile)
-	mux.HandleFunc("GET /api/files", h.handleGetThumbnailIDs)
-	mux.HandleFunc("DELETE /api/files/{id}", h.handleDeleteFile)
-	mux.HandleFunc("POST /api/files/delete-batch", h.handleDeleteBatch)
+func (h *WebHandler) RegisterRoutes(mux *http.ServeMux) {
+	mux.HandleFunc("POST /files", h.handleUploadFile)
+	mux.HandleFunc("GET /files/{id}", h.handleDownloadFile)
+	mux.HandleFunc("GET /files", h.handleRenderThumbnails)
+	mux.HandleFunc("DELETE /files/{id}", h.handleDeleteFile)
+	mux.HandleFunc("POST /files/delete-batch", h.handleDeleteBatch)
 }
 
-func (h *APIHandler) handleUploadFile(w http.ResponseWriter, r *http.Request) {
+func (h *WebHandler) handleUploadFile(w http.ResponseWriter, r *http.Request) {
 	var errs []error
 	var batch []*models.FileMeta
 
@@ -93,10 +95,14 @@ func (h *APIHandler) handleUploadFile(w http.ResponseWriter, r *http.Request) {
 		WriteJSON(w, http.StatusMultiStatus, errMessages)
 		return
 	}
-	WriteJSON(w, http.StatusCreated, nil)
+	var ids []string
+	for _, item := range batch {
+		ids = append(ids, item.ID)
+	}
+	components.ShowGallery(ids).Render(r.Context(), w)
 }
 
-func (h *APIHandler) handleDownloadFile(w http.ResponseWriter, r *http.Request) {
+func (h *WebHandler) handleDownloadFile(w http.ResponseWriter, r *http.Request) {
 	fm, err := h.fs.LookupFileMeta(r.Context(), r.PathValue("id"))
 	if err != nil {
 		WriteJSONError(w, http.StatusInternalServerError, err.Error())
@@ -119,16 +125,16 @@ func (h *APIHandler) handleDownloadFile(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
-func (h *APIHandler) handleGetThumbnailIDs(w http.ResponseWriter, r *http.Request) {
-	fileNames, err := h.fs.GetThumbnailIDs(r.Context())
+func (h *WebHandler) handleRenderThumbnails(w http.ResponseWriter, r *http.Request) {
+	ids, err := h.fs.GetThumbnailIDs(r.Context())
 	if err != nil {
-		WriteJSONError(w, http.StatusInternalServerError, err.Error())
+		// render error toast
 		return
 	}
-	WriteJSON(w, http.StatusOK, fileNames)
+	templates.HomePage(ids).Render(r.Context(), w)
 }
 
-func (h *APIHandler) handleDeleteFile(w http.ResponseWriter, r *http.Request) {
+func (h *WebHandler) handleDeleteFile(w http.ResponseWriter, r *http.Request) {
 	var errs []error
 
 	fm, err := h.fs.LookupFileMeta(r.Context(), r.PathValue("id"))
@@ -164,7 +170,7 @@ func (h *APIHandler) handleDeleteFile(w http.ResponseWriter, r *http.Request) {
 	WriteJSON(w, http.StatusNoContent, nil)
 }
 
-func (h *APIHandler) handleDeleteBatch(w http.ResponseWriter, r *http.Request) {
+func (h *WebHandler) handleDeleteBatch(w http.ResponseWriter, r *http.Request) {
 	var ids []string
 	if err := json.NewDecoder(r.Body).Decode(&ids); err != nil {
 		WriteJSONError(w, http.StatusBadRequest, err.Error())

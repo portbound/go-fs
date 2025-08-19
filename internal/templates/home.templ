@@ -1,0 +1,13 @@
+package templates
+
+import "github.com/portbound/go-fs/internal/templates/layouts"
+
+import "github.com/portbound/go-fs/internal/templates/components"
+
+templ HomePage(ids []string) {
+	@layouts.Base("Files") {
+		<h1 class="text-2xl font-bold mb-4">Files</h1>
+		@components.UploadFileForm()
+		@components.ShowGallery(ids)
+	}
+}

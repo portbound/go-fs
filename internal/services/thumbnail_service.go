@@ -25,7 +25,7 @@ func (ts *ThumbnailService) Generate(ctx context.Context, fm *models.FileMeta) (
 
 	cmd := exec.CommandContext(ctx, "ffmpeg",
 		"-i", fm.TmpFilePath,
-		"-vf", "scale=150:-1",
+		"-vf", "scale=150:150:force_original_aspect_ratio=increase,crop=150:150",
 		"-vframes", "1",
 		thumbPath,
 	)
