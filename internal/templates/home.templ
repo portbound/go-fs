@@ -1,0 +1,20 @@
+
+package templates
+
+import "github.com/portbound/go-fs/internal/templates/layouts"
+import "fmt"
+
+templ HomePage(ids []string) {
+	@layouts.Base("Files") {
+		<h1 class="text-2xl font-bold mb-4">Files</h1>
+		<div class="grid grid-cols-4 gap-4">
+			for _, id := range ids {
+				<img
+					src={ templ.URL(fmt.Sprintf("/files/%s", id)) }
+					alt="thumnbail"
+					class="w-full h-auto rounded-lg shadow-md"
+				/>
+			}
+		</div>
+	}
+}
