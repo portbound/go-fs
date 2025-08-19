@@ -18,6 +18,7 @@ import (
 	"github.com/portbound/go-fs/internal/models"
 	"github.com/portbound/go-fs/internal/services"
 	"github.com/portbound/go-fs/internal/templates"
+	"github.com/portbound/go-fs/internal/templates/components"
 	"github.com/portbound/go-fs/internal/utils"
 )
 
@@ -94,7 +95,11 @@ func (h *WebHandler) handleUploadFile(w http.ResponseWriter, r *http.Request) {
 		WriteJSON(w, http.StatusMultiStatus, errMessages)
 		return
 	}
-	WriteJSON(w, http.StatusCreated, nil)
+	var ids []string
+	for _, item := range batch {
+		ids = append(ids, item.ID)
+	}
+	components.ShowGallery(ids).Render(r.Context(), w)
 }
 
 func (h *WebHandler) handleDownloadFile(w http.ResponseWriter, r *http.Request) {
@@ -121,16 +126,9 @@ func (h *WebHandler) handleDownloadFile(w http.ResponseWriter, r *http.Request) 
 }
 
 func (h *WebHandler) handleRenderThumbnails(w http.ResponseWriter, r *http.Request) {
-	// TODO rework this to just "GetThumbnails"
-	// capture query params
-	// get all files matching query
-	// for each file check if has thumbnail and return thumb-id or nil 
-	// page should render stock image for file type, i.e. .txt .pdf .md .zip if no thumbnail found 
-	// store stock images inside assets folder
-
 	ids, err := h.fs.GetThumbnailIDs(r.Context())
 	if err != nil {
-		// render error component
+		// render error toast
 		return
 	}
 	templates.HomePage(ids).Render(r.Context(), w)
