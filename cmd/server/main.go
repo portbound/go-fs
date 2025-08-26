@@ -30,11 +30,10 @@ func main() {
 		log.Fatalf("failed to build storage repository: %v", err)
 	}
 
-	fileService, err := services.NewFileService(fileRepo, storageRepo, cfg.TmpDir, cfg.LogsDir)
+	fileService := services.NewFileService(fileRepo, storageRepo, cfg.TmpDir)
 	if err != nil {
 		log.Fatalf("failed to build file service: %v", err)
 	}
-	defer fileService.CloseLog()
 
 	webHandler := handlers.NewAPIHandler(fileService)
 
