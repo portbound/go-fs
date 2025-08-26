@@ -1,7 +1,0 @@
-{
-  "componentsDir": "internal/templates/components",
-  "utilsDir": "internal/templates/utils",
-  "moduleName": "github.com/portbound/go-fs",
-  "jsDir": "web/static/js",
-  "jsPublicPath": "/web/static/js"
-}

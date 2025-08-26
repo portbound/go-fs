@@ -36,7 +36,7 @@ func main() {
 	}
 	defer fileService.CloseLog()
 
-	webHandler := handlers.NewWebHandler(fileService)
+	webHandler := handlers.NewAPIHandler(fileService)
 
 	mux := http.NewServeMux()
 	webHandler.RegisterRoutes(mux)

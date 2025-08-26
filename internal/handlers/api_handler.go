@@ -3,7 +3,9 @@ package handlers
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -13,38 +15,37 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/portbound/go-fs/internal/models"
 	"github.com/portbound/go-fs/internal/services"
-	"github.com/portbound/go-fs/internal/templates"
-	"github.com/portbound/go-fs/internal/templates/components"
 	"github.com/portbound/go-fs/internal/utils"
 )
 
-type WebHandler struct {
+type APIHandler struct {
 	fs *services.FileService
 }
 
-func NewWebHandler(fs *services.FileService) *WebHandler {
-	return &WebHandler{fs: fs}
+func NewAPIHandler(fs *services.FileService) *APIHandler {
+	return &APIHandler{fs: fs}
 }
 
-func (h *WebHandler) RegisterRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("POST /files", h.handleUploadFile)
-	mux.HandleFunc("GET /files/{id}", h.handleDownloadFile)
-	mux.HandleFunc("GET /files", h.handleRenderThumbnails)
-	mux.HandleFunc("DELETE /files/{id}", h.handleDeleteFile)
-	mux.HandleFunc("POST /files/delete-batch", h.handleDeleteBatch)
+func (h *APIHandler) RegisterRoutes(mux *http.ServeMux) {
+	mux.HandleFunc("GET /api/files", h.handleGetFileMeta)
+	mux.HandleFunc("POST /api/files", h.handleUploadFile)
+	mux.HandleFunc("GET /api/files/{id}", h.handleDownloadFile)
+	mux.HandleFunc("DELETE /api/files/{id}", h.handleDeleteFile)
+	mux.HandleFunc("POST /api/files/delete-batch", h.handleDeleteBatch)
 }
 
-func (h *WebHandler) handleUploadFile(w http.ResponseWriter, r *http.Request) {
+func (h *APIHandler) handleUploadFile(w http.ResponseWriter, r *http.Request) {
 	var errs []error
 	var batch []*models.FileMeta
 
 	_, params, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
 	if err != nil {
-		WriteJSONError(w, http.StatusBadRequest, err.Error())
+		utils.WriteJSONError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -55,14 +56,14 @@ func (h *WebHandler) handleUploadFile(w http.ResponseWriter, r *http.Request) {
 			if err == io.EOF {
 				break
 			}
-			WriteJSONError(w, http.StatusInternalServerError, err.Error())
+			utils.WriteJSONError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
 		defer part.Close()
 
 		if part.FileName() != "" {
 			id := uuid.New().String()
-			path, err := utils.StageFileToDisk(r.Context(), h.fs.TmpDir, id, part)
+			path, bytesWritten, err := utils.StageFileToDisk(r.Context(), h.fs.TmpDir, id, part)
 			if err != nil {
 				errs = append(errs, fmt.Errorf("handleUploadFile: StageFileToDisk() failed: %v - skipping: %s", err, part.FileName()))
 				continue
@@ -71,11 +72,11 @@ func (h *WebHandler) handleUploadFile(w http.ResponseWriter, r *http.Request) {
 
 			batch = append(batch, &models.FileMeta{
 				ID:          id,
-				ParentID:    "",
-				ThumbID:     "",
 				Name:        filepath.Base(part.FileName()),
-				Owner:       "me",
 				ContentType: part.Header.Get("Content-Type"),
+				Size:        bytesWritten,
+				UploadDate:  time.Now(),
+				Owner:       "me",
 				TmpFilePath: path,
 			})
 		}
@@ -92,26 +93,30 @@ func (h *WebHandler) handleUploadFile(w http.ResponseWriter, r *http.Request) {
 		for _, err := range errs {
 			errMessages = append(errMessages, err.Error())
 		}
-		WriteJSON(w, http.StatusMultiStatus, errMessages)
+		utils.WriteJSON(w, http.StatusMultiStatus, errMessages)
 		return
 	}
-	var ids []string
+	var fm []*models.FileMeta
 	for _, item := range batch {
-		ids = append(ids, item.ID)
+		fm = append(fm, item)
 	}
-	components.ShowGallery(ids).Render(r.Context(), w)
+	utils.WriteJSON(w, http.StatusCreated, nil)
 }
 
-func (h *WebHandler) handleDownloadFile(w http.ResponseWriter, r *http.Request) {
+func (h *APIHandler) handleDownloadFile(w http.ResponseWriter, r *http.Request) {
 	fm, err := h.fs.LookupFileMeta(r.Context(), r.PathValue("id"))
 	if err != nil {
-		WriteJSONError(w, http.StatusInternalServerError, err.Error())
+		if errors.Is(err, sql.ErrNoRows) {
+			utils.WriteJSONError(w, http.StatusNotFound, err.Error())
+			return
+		}
+		utils.WriteJSONError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
 	gcsReader, err := h.fs.GetFile(r.Context(), fm.ID)
 	if err != nil {
-		WriteJSONError(w, http.StatusInternalServerError, err.Error())
+		utils.WriteJSONError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	defer gcsReader.Close()
@@ -125,21 +130,21 @@ func (h *WebHandler) handleDownloadFile(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
-func (h *WebHandler) handleRenderThumbnails(w http.ResponseWriter, r *http.Request) {
-	ids, err := h.fs.GetThumbnailIDs(r.Context())
+func (h *APIHandler) handleGetFileMeta(w http.ResponseWriter, r *http.Request) {
+	afm, err := h.fs.LookupAllFileMeta(r.Context())
 	if err != nil {
-		// render error toast
+		utils.WriteJSONError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	templates.HomePage(ids).Render(r.Context(), w)
+	utils.WriteJSON(w, http.StatusOK, afm)
 }
 
-func (h *WebHandler) handleDeleteFile(w http.ResponseWriter, r *http.Request) {
+func (h *APIHandler) handleDeleteFile(w http.ResponseWriter, r *http.Request) {
 	var errs []error
 
 	fm, err := h.fs.LookupFileMeta(r.Context(), r.PathValue("id"))
 	if err != nil {
-		WriteJSONError(w, http.StatusNotFound, err.Error())
+		utils.WriteJSONError(w, http.StatusNotFound, err.Error())
 		return
 	}
 
@@ -164,16 +169,16 @@ func (h *WebHandler) handleDeleteFile(w http.ResponseWriter, r *http.Request) {
 		for _, err := range errs {
 			errMessages = append(errMessages, err.Error())
 		}
-		WriteJSON(w, http.StatusMultiStatus, errMessages)
+		utils.WriteJSON(w, http.StatusMultiStatus, errMessages)
 		return
 	}
-	WriteJSON(w, http.StatusNoContent, nil)
+	utils.WriteJSON(w, http.StatusNoContent, nil)
 }
 
-func (h *WebHandler) handleDeleteBatch(w http.ResponseWriter, r *http.Request) {
+func (h *APIHandler) handleDeleteBatch(w http.ResponseWriter, r *http.Request) {
 	var ids []string
 	if err := json.NewDecoder(r.Body).Decode(&ids); err != nil {
-		WriteJSONError(w, http.StatusBadRequest, err.Error())
+		utils.WriteJSONError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -214,9 +219,9 @@ func (h *WebHandler) handleDeleteBatch(w http.ResponseWriter, r *http.Request) {
 			for err := range ch {
 				errMessages = append(errMessages, err.Error())
 			}
-			WriteJSON(w, http.StatusMultiStatus, errMessages)
+			utils.WriteJSON(w, http.StatusMultiStatus, errMessages)
 			return
 		}
 	}()
-	WriteJSON(w, http.StatusNoContent, nil)
+	utils.WriteJSON(w, http.StatusNoContent, nil)
 }
