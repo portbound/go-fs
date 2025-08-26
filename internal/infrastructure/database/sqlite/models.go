@@ -14,5 +14,7 @@ type File struct {
 	ThumbID     sql.NullString `json:"thumb_id"`
 	Name        string         `json:"name"`
 	ContentType string         `json:"content_type"`
+	Size        int64          `json:"size"`
+	UploadDate  string         `json:"upload_date"`
 	Owner       string         `json:"owner"`
 }

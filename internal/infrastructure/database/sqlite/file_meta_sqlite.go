@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"time"
 
 	_ "embed"
 
@@ -47,8 +48,10 @@ func (db *DB) Create(ctx context.Context, filemeta *models.FileMeta) error {
 		ParentID:    sql.NullString{String: filemeta.ParentID, Valid: true},
 		ThumbID:     sql.NullString{String: filemeta.ThumbID, Valid: true},
 		Name:        filemeta.Name,
-		Owner:       filemeta.Owner,
 		ContentType: filemeta.ContentType,
+		Size:        filemeta.Size,
+		UploadDate:  filemeta.UploadDate.Format(time.RFC3339),
+		Owner:       filemeta.Owner,
 	}
 	return db.Queries.Create(ctx, params)
 }
@@ -83,12 +86,15 @@ func (db *DB) Delete(ctx context.Context, id string) error {
 }
 
 func mapToFile(f File) (*models.FileMeta, error) {
+	uploadDate, _ := time.Parse(time.RFC3339, f.UploadDate)
 	return &models.FileMeta{
 		ID:          f.ID,
 		ParentID:    f.ParentID.String,
 		ThumbID:     f.ThumbID.String,
 		Name:        f.Name,
 		ContentType: f.ContentType,
+		Size:        f.Size,
+		UploadDate:  uploadDate,
 		Owner:       f.Owner,
 	}, nil
 }

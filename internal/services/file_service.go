@@ -84,10 +84,25 @@ func (fs *FileService) ProcessBatch(ctx context.Context, batch []*models.FileMet
 					}
 					defer os.Remove(tfm.TmpFilePath)
 
-					if err = fs.processFile(ctx, tfm); err != nil {
-						ch <- fmt.Errorf("services.ProcessBatch: failed to process thumbnail for %s: %w", fm.Name, err)
-						return
-					}
+			thumbID := fmt.Sprintf("thumb-%s", fm.ID)
+			path, bytesWritten, err := utils.StageFileToDisk(ctx, fs.TmpDir, thumbID, thumbnailReader)
+			if err != nil {
+				ch <- fmt.Errorf("services.Processbatch: failed to stage thumbnail for %s to disk: %w", fm.Name, err)
+			}
+			defer os.Remove(path)
+
+			fm.ThumbID = thumbID
+			thumbFm := &models.FileMeta{
+				ID:          thumbID,
+				ParentID:    fm.ID,
+				ThumbID:     "",
+				Name:        fmt.Sprintf("thumb-%s", fm.Name),
+				ContentType: "image/jpeg",
+				Size:        bytesWritten,
+				UploadDate:  time.Now(),
+				Owner:       fm.Owner,
+				TmpFilePath: path,
+			}
 
 					fs.logger.Info("Thumbnail Upload: Success", "file", fm.Name)
 				}

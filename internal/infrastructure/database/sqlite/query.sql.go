@@ -12,9 +12,9 @@ import (
 
 const create = `-- name: Create :exec
 INSERT INTO files (
-	id, parent_id, thumb_id, name, content_type, owner
+	id, parent_id, thumb_id, name, content_type, size, upload_date, owner
 ) VALUES (
-	?, ?, ?, ?, ?, ?
+	?, ?, ?, ?, ?, ?, ?, ?
 )
 `
 
@@ -24,6 +24,8 @@ type CreateParams struct {
 	ThumbID     sql.NullString `json:"thumb_id"`
 	Name        string         `json:"name"`
 	ContentType string         `json:"content_type"`
+	Size        int64          `json:"size"`
+	UploadDate  string         `json:"upload_date"`
 	Owner       string         `json:"owner"`
 }
 
@@ -34,6 +36,8 @@ func (q *Queries) Create(ctx context.Context, arg CreateParams) error {
 		arg.ThumbID,
 		arg.Name,
 		arg.ContentType,
+		arg.Size,
+		arg.UploadDate,
 		arg.Owner,
 	)
 	return err
@@ -50,7 +54,7 @@ func (q *Queries) Delete(ctx context.Context, id string) error {
 }
 
 const get = `-- name: Get :one
-SELECT id, parent_id, thumb_id, name, content_type, owner FROM files 
+SELECT id, parent_id, thumb_id, name, content_type, size, upload_date, owner FROM files 
 WHERE id = ? LIMIT 1
 `
 
@@ -63,13 +67,15 @@ func (q *Queries) Get(ctx context.Context, id string) (File, error) {
 		&i.ThumbID,
 		&i.Name,
 		&i.ContentType,
+		&i.Size,
+		&i.UploadDate,
 		&i.Owner,
 	)
 	return i, err
 }
 
 const getAll = `-- name: GetAll :many
-SELECT id, parent_id, thumb_id, name, content_type, owner FROM files 
+SELECT id, parent_id, thumb_id, name, content_type, size, upload_date, owner FROM files
 ORDER BY upload_date
 `
 
@@ -88,6 +94,8 @@ func (q *Queries) GetAll(ctx context.Context) ([]File, error) {
 			&i.ThumbID,
 			&i.Name,
 			&i.ContentType,
+			&i.Size,
+			&i.UploadDate,
 			&i.Owner,
 		); err != nil {
 			return nil, err
