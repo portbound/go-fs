@@ -19,16 +19,15 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/portbound/go-fs/internal/models"
-	"github.com/portbound/go-fs/internal/services"
-	"github.com/portbound/go-fs/internal/utils"
-)
+	"github.com/portbound/go-fs/internal/services")
 
 type APIHandler struct {
-	fs *services.FileService
+	fileService     *services.FileService
+	fileMetaService *services.FileMetaService
 }
 
-func NewAPIHandler(fs *services.FileService) *APIHandler {
-	return &APIHandler{fs: fs}
+func NewAPIHandler(fs *services.FileService, fms *services.FileMetaService) *APIHandler {
+	return &APIHandler{fileService: fs, fileMetaService: fms}
 }
 
 func (h *APIHandler) RegisterRoutes(mux *http.ServeMux) {
@@ -45,7 +44,7 @@ func (h *APIHandler) handleUploadFile(w http.ResponseWriter, r *http.Request) {
 
 	_, params, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
 	if err != nil {
-		utils.WriteJSONError(w, http.StatusBadRequest, err.Error())
+		WriteJSONError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -56,14 +55,14 @@ func (h *APIHandler) handleUploadFile(w http.ResponseWriter, r *http.Request) {
 			if err == io.EOF {
 				break
 			}
-			utils.WriteJSONError(w, http.StatusInternalServerError, err.Error())
+			WriteJSONError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
 		defer part.Close()
 
 		if part.FileName() != "" {
 			id := uuid.New().String()
-			path, bytesWritten, err := utils.StageFileToDisk(r.Context(), h.fs.TmpDir, id, part)
+			path, bytesWritten, err := h.fileService.StageFileToDisk(r.Context(), id, part)
 			if err != nil {
 				errs = append(errs, fmt.Errorf("handleUploadFile: StageFileToDisk() failed: %v - skipping: %s", err, part.FileName()))
 				continue
@@ -82,7 +81,7 @@ func (h *APIHandler) handleUploadFile(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	batchErrs := h.fs.ProcessBatch(r.Context(), batch)
+	batchErrs := h.fileService.ProcessBatch(r.Context(), batch)
 	if batchErrs != nil {
 		errs = append(errs, batchErrs...)
 	}
@@ -93,30 +92,30 @@ func (h *APIHandler) handleUploadFile(w http.ResponseWriter, r *http.Request) {
 		for _, err := range errs {
 			errMessages = append(errMessages, err.Error())
 		}
-		utils.WriteJSON(w, http.StatusMultiStatus, errMessages)
+		WriteJSON(w, http.StatusMultiStatus, errMessages)
 		return
 	}
 	var fm []*models.FileMeta
 	for _, item := range batch {
 		fm = append(fm, item)
 	}
-	utils.WriteJSON(w, http.StatusCreated, nil)
+	WriteJSON(w, http.StatusCreated, nil)
 }
 
 func (h *APIHandler) handleDownloadFile(w http.ResponseWriter, r *http.Request) {
-	fm, err := h.fs.LookupFileMeta(r.Context(), r.PathValue("id"))
+	fm, err := h.fileMetaService.LookupFileMeta(r.Context(), r.PathValue("id"))
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			utils.WriteJSONError(w, http.StatusNotFound, err.Error())
+			WriteJSONError(w, http.StatusNotFound, err.Error())
 			return
 		}
-		utils.WriteJSONError(w, http.StatusInternalServerError, err.Error())
+		WriteJSONError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	gcsReader, err := h.fs.GetFile(r.Context(), fm.ID)
+	gcsReader, err := h.fileService.DownloadFile(r.Context(), fm.ID)
 	if err != nil {
-		utils.WriteJSONError(w, http.StatusInternalServerError, err.Error())
+		WriteJSONError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	defer gcsReader.Close()
@@ -131,36 +130,36 @@ func (h *APIHandler) handleDownloadFile(w http.ResponseWriter, r *http.Request) 
 }
 
 func (h *APIHandler) handleGetFileMeta(w http.ResponseWriter, r *http.Request) {
-	afm, err := h.fs.LookupAllFileMeta(r.Context())
+	afm, err := h.fileMetaService.LookupAllFileMeta(r.Context())
 	if err != nil {
-		utils.WriteJSONError(w, http.StatusInternalServerError, err.Error())
+		WriteJSONError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	utils.WriteJSON(w, http.StatusOK, afm)
+	WriteJSON(w, http.StatusOK, afm)
 }
 
 func (h *APIHandler) handleDeleteFile(w http.ResponseWriter, r *http.Request) {
 	var errs []error
 
-	fm, err := h.fs.LookupFileMeta(r.Context(), r.PathValue("id"))
+	fm, err := h.fileMetaService.LookupFileMeta(r.Context(), r.PathValue("id"))
 	if err != nil {
-		utils.WriteJSONError(w, http.StatusNotFound, err.Error())
+		WriteJSONError(w, http.StatusNotFound, err.Error())
 		return
 	}
 
 	if fm.ThumbID != "" {
-		if err := h.fs.DeleteFile(r.Context(), fm.ThumbID); err != nil {
+		if err := h.fileService.DeleteFile(r.Context(), fm.ThumbID); err != nil {
 			errs = append(errs, fmt.Errorf("services.DeleteFile: failed to delete thumbnail for %s: %v", fm.ID, err))
 		}
-		if err := h.fs.DeleteFileMeta(r.Context(), fm.ThumbID); err != nil {
+		if err := h.fileMetaService.DeleteFileMeta(r.Context(), fm.ThumbID); err != nil {
 			errs = append(errs, fmt.Errorf("services.DeleteFileMeta: failed to delete file meta for %s: %v", fm.ID, err))
 		}
 	}
 
-	if err := h.fs.DeleteFile(r.Context(), fm.ID); err != nil {
+	if err := h.fileService.DeleteFile(r.Context(), fm.ID); err != nil {
 		errs = append(errs, fmt.Errorf("services.DeleteFile: failed to delete file %s: %v", fm.ID, err))
 	}
-	if err := h.fs.DeleteFileMeta(r.Context(), fm.ID); err != nil {
+	if err := h.fileMetaService.DeleteFileMeta(r.Context(), fm.ID); err != nil {
 		errs = append(errs, fmt.Errorf("services.DeleteFileMeta: failed to delete file meta for %s: %v", fm.ID, err))
 	}
 
@@ -169,16 +168,16 @@ func (h *APIHandler) handleDeleteFile(w http.ResponseWriter, r *http.Request) {
 		for _, err := range errs {
 			errMessages = append(errMessages, err.Error())
 		}
-		utils.WriteJSON(w, http.StatusMultiStatus, errMessages)
+		WriteJSON(w, http.StatusMultiStatus, errMessages)
 		return
 	}
-	utils.WriteJSON(w, http.StatusNoContent, nil)
+	WriteJSON(w, http.StatusNoContent, nil)
 }
 
 func (h *APIHandler) handleDeleteBatch(w http.ResponseWriter, r *http.Request) {
 	var ids []string
 	if err := json.NewDecoder(r.Body).Decode(&ids); err != nil {
-		utils.WriteJSONError(w, http.StatusBadRequest, err.Error())
+		WriteJSONError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -188,25 +187,25 @@ func (h *APIHandler) handleDeleteBatch(w http.ResponseWriter, r *http.Request) {
 	for _, id := range ids {
 		wg.Add(1)
 		go func(id string) {
-			fm, err := h.fs.LookupFileMeta(ctx, id)
+			fm, err := h.fileMetaService.LookupFileMeta(ctx, id)
 			if err != nil {
 				ch <- fmt.Errorf("services.LookupFileMeta: file not found for id %s: %w", id, err)
 				return
 			}
 
 			if fm.ThumbID != "" {
-				if err := h.fs.DeleteFile(ctx, fm.ThumbID); err != nil {
+				if err := h.fileService.DeleteFile(ctx, fm.ThumbID); err != nil {
 					ch <- fmt.Errorf("services.DeleteFile: failed to delete thumbnail for %s: %v", fm.ID, err)
 				}
-				if err := h.fs.DeleteFileMeta(ctx, fm.ThumbID); err != nil {
+				if err := h.fileMetaService.DeleteFileMeta(ctx, fm.ThumbID); err != nil {
 					ch <- fmt.Errorf("services.DeleteFileMeta: failed to delete file meta for %s: %v", fm.ID, err)
 				}
 			}
 
-			if err := h.fs.DeleteFile(ctx, fm.ID); err != nil {
+			if err := h.fileService.DeleteFile(ctx, fm.ID); err != nil {
 				ch <- fmt.Errorf("services.DeleteFile: failed to delete file %s: %v", fm.ID, err)
 			}
-			if err := h.fs.DeleteFileMeta(ctx, fm.ID); err != nil {
+			if err := h.fileMetaService.DeleteFileMeta(ctx, fm.ID); err != nil {
 				ch <- fmt.Errorf("services.DeleteFileMeta: failed to delete file meta for %s: %v", fm.ID, err)
 			}
 		}(id)
@@ -219,9 +218,9 @@ func (h *APIHandler) handleDeleteBatch(w http.ResponseWriter, r *http.Request) {
 			for err := range ch {
 				errMessages = append(errMessages, err.Error())
 			}
-			utils.WriteJSON(w, http.StatusMultiStatus, errMessages)
+			WriteJSON(w, http.StatusMultiStatus, errMessages)
 			return
 		}
 	}()
-	utils.WriteJSON(w, http.StatusNoContent, nil)
+	WriteJSON(w, http.StatusNoContent, nil)
 }

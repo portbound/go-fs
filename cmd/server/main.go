@@ -30,15 +30,13 @@ func main() {
 		log.Fatalf("failed to build storage repository: %v", err)
 	}
 
-	fileService := services.NewFileService(fileRepo, storageRepo, cfg.TmpDir)
-	if err != nil {
-		log.Fatalf("failed to build file service: %v", err)
-	}
+	fileMetaService := services.NewFileMetaService(fileRepo)
+	fileService := services.NewFileService(storageRepo, fileMetaService, cfg.TmpDir)
 
-	webHandler := handlers.NewAPIHandler(fileService)
+	apiHandler := handlers.NewAPIHandler(fileService, fileMetaService)
 
 	mux := http.NewServeMux()
-	webHandler.RegisterRoutes(mux)
+	apiHandler.RegisterRoutes(mux)
 
 	log.Printf("starting server on port %s\n", cfg.ServerPort)
 	if err := http.ListenAndServe(cfg.ServerPort, mux); err != nil {
