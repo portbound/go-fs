@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"cloud.google.com/go/storage"
-	"google.golang.org/api/iterator"
 )
 
 type Storage struct {
@@ -61,24 +60,7 @@ func (s *Storage) Download(ctx context.Context, fileName string) (io.ReadCloser,
 	if err != nil {
 		return nil, fmt.Errorf("gcs.Get: failed to downlod file %s: %w", fileName, err)
 	}
-
 	return r, nil
-}
-
-func (s *Storage) ListObjects(ctx context.Context, query *storage.Query) ([]string, error) {
-	it := s.client.Bucket(s.bkt).Objects(ctx, query)
-	files := []string{}
-	for {
-		attrs, err := it.Next()
-		if err != nil {
-			if err == iterator.Done {
-				break
-			}
-			return nil, fmt.Errorf("Bucket(%q).Objects: %w", s.bkt, err)
-		}
-		files = append(files, attrs.Name)
-	}
-	return files, nil
 }
 
 func (s *Storage) Delete(ctx context.Context, id string) error {
@@ -87,5 +69,6 @@ func (s *Storage) Delete(ctx context.Context, id string) error {
 	if err := obj.Delete(ctx); err != nil {
 		return fmt.Errorf("gcs.Delete: failed to delete %s: %w", id, err)
 	}
+
 	return nil
 }
