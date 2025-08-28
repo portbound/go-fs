@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
+	"time"
 
 	"github.com/portbound/go-fs/internal/config"
 	"github.com/portbound/go-fs/internal/handlers"
@@ -30,8 +33,14 @@ func main() {
 		log.Fatalf("failed to build storage repository: %v", err)
 	}
 
+	logFile, logger, err := SetupLogging(cfg.LogsDir)
+	if err != nil {
+		log.Fatalf("failed to setup logging: %v", err)
+	}
+	defer logFile.Close()
+
 	fileMetaService := services.NewFileMetaService(fileRepo)
-	fileService := services.NewFileService(storageRepo, fileMetaService, cfg.TmpDir)
+	fileService := services.NewFileService(storageRepo, fileMetaService, logger, cfg.TmpDir)
 
 	apiHandler := handlers.NewAPIHandler(fileService, fileMetaService)
 
@@ -61,4 +70,21 @@ func buildStorageRepo(storageProvider, bucket string) (repositories.StorageRepos
 	default:
 		return nil, fmt.Errorf("unsupported cloud provider: %s", storageProvider)
 	}
+}
+
+func SetupLogging(dir string) (*os.File, *log.Logger, error) {
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return nil, nil, fmt.Errorf("failed to create log directory '%s': %w", dir, err)
+	}
+
+	logName := fmt.Sprintf("%s.log", time.Now().Format("2006-01-02"))
+	logFilePath := filepath.Join(dir, logName)
+
+	logFile, err := os.OpenFile(logFilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to open log file '%s': %w", logFilePath, err)
+	}
+
+	logger := log.New(logFile, "", log.Ldate|log.Ltime|log.Lshortfile)
+	return logFile, logger, nil
 }

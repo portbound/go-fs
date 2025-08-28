@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"sync"
@@ -20,14 +21,16 @@ type FileService struct {
 	storage          repositories.StorageRepository
 	thumbnailService *ThumbnailService
 	fileMetaService  *FileMetaService
+	logger           *log.Logger
 	tmpDir           string
 }
 
-func NewFileService(storageRepo repositories.StorageRepository, fileMetaService *FileMetaService, tmpDir string) *FileService {
+func NewFileService(storageRepo repositories.StorageRepository, fileMetaService *FileMetaService, logger *log.Logger, tmpDir string) *FileService {
 	return &FileService{
 		storage:          storageRepo,
 		thumbnailService: NewThumbnailService(),
 		fileMetaService:  fileMetaService,
+		logger:           logger,
 		tmpDir:           tmpDir,
 	}
 }
@@ -85,7 +88,7 @@ func (fs *FileService) ProcessBatch(ctx context.Context, batch []*models.FileMet
 				return
 			}
 
-			// fs.logger.Writer.Printf("Thumbnail Upload Success: File '%s'", fm.Name)
+			fs.logger.Printf("Thumbnail Upload Success: File '%s'", fm.Name)
 
 			fileReader, err := os.Open(fm.TmpFilePath)
 			if err != nil {
@@ -97,7 +100,7 @@ func (fs *FileService) ProcessBatch(ctx context.Context, batch []*models.FileMet
 			if err := fs.processFile(ctx, fm); err != nil {
 				if fm.ThumbID != "" {
 					if err = fs.DeleteFile(ctx, fm.ThumbID); err != nil {
-						// fs.logger.Writer.Printf("CRITICAL - Delete File: Failed to delete orphaned thumbnail '%s'", fm.ThumbID)
+						fs.logger.Printf("CRITICAL - Delete File: Failed to delete orphaned thumbnail '%s'", fm.ThumbID)
 						ch <- fmt.Errorf("CRITICAL - services.ProcessBatch: failed to delete orphaned thumbnail %s: %v", fm.ThumbID, err)
 					}
 				}
@@ -105,7 +108,7 @@ func (fs *FileService) ProcessBatch(ctx context.Context, batch []*models.FileMet
 				return
 			}
 
-			// fs.logger.Writer.Printf("File Upload Success: file '%s'", fm.Name)
+			fs.logger.Printf("File Upload Success: File '%s'", fm.Name)
 			ch <- nil
 		}()
 	}
@@ -186,7 +189,7 @@ func (fs *FileService) processFile(ctx context.Context, fm *models.FileMeta) err
 
 	if err := fs.fileMetaService.SaveFileMeta(ctx, fm); err != nil {
 		if rbErr := fs.DeleteFile(ctx, fm.ID); rbErr != nil {
-			return fmt.Errorf("CRITICAL: failed to delete orphaned file %s from storage: %w", fm.Name, rbErr)
+			fs.logger.Printf("CRITICAL: failed to delete orphaned file %s from storage: %w", fm.Name, rbErr)
 		}
 		return fmt.Errorf("save metadata failed for %s: %w", fm.Name, err)
 	}
