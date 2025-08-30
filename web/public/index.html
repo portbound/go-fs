@@ -1,11 +1,41 @@
-<html>
-
+<!doctype html>
 <head>
-        <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script
+    defer
+    src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"
+  ></script>
+  <script
+    defer
+    src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"
+  ></script>
 </head>
 
-<body>
-        <div x-data="{ files: [] }" x-init="
+<body class="p-8 bg-slate-700">
+  <nav class="mb-8 p-4 bg-slate-800 rounded-lg text-white">
+    <div class="container mx-auto flex justify-between items-center">
+      <a href="#" class="text-2xl font-bold">Go-FS</a>
+      <div>
+        <a
+          href="#"
+          class="text-white hover:text-gray-300 px-3 py-2 rounded-md text-sm font-medium"
+          >Home</a
+        >
+        <a
+          href="#"
+          class="text-white hover:text-gray-300 px-3 py-2 rounded-md text-sm font-medium"
+          >Files</a
+        >
+        <a
+          href="#"
+          class="text-white hover:text-gray-300 px-3 py-2 rounded-md text-sm font-medium"
+          >About</a
+        >
+      </div>
+    </div>
+  </nav>
+  <div
+    x-data="{ files: [], showPopover: false, selectedFile: {}, showFullscreenImage: false, fullscreenImageUrl: '' }"
+    x-init="
         fetch('/api/files')
             .then(response => response.json())
             .then(data => {
@@ -16,11 +46,113 @@
                 console.error('Error fetching data:', error);
                 isLoading = false;
             });
-        ">
-                <template x-for="file in files" :key="file.id">
-                        <img :src="`/api/files/${file['thumb-id']}`" :alt="`Thumbnail for ${file.name}`">
-                </template>
-        </div>
+        "
+    class="grid grid-cols-12"
+  >
+    <template x-for="file in files" :key="file.id">
+      <div @click="selectedFile = file; showPopover = true">
+        <img
+          :src="`/api/files/${file['thumb-id']}`"
+          :alt="`Thumbnail for ${file.name}`"
+          class="rounded-lg"
+        />
+      </div>
+    </template>
+
+    <!-- Popover/Modal Structure -->
+    <div
+      x-show="showPopover"
+      class="fixed inset-0 bg-opacity-75 flex items-center justify-center z-50"
+      x-transition:enter="transition ease-out duration-300"
+      x-transition:enter-start="opacity-0"
+      x-transition:enter-end="opacity-100"
+      x-transition:leave="transition ease-in duration-200"
+      x-transition:leave-start="opacity-100"
+      x-transition:leave-end="opacity-0"
+    >
+      <div
+        class="bg-white p-4 rounded-lg shadow-lg max-w-3xl max-h-full overflow-auto relative"
+        @click.away="showPopover = false"
+      >
+        <template
+          x-if="selectedFile.type && selectedFile.type.startsWith('image/')"
+        >
+          <div>
+            <img
+              :src="`/api/files/${selectedFile.id}`"
+              :alt="selectedFile.name"
+              class="max-w-full h-auto"
+            />
+            <div class="grid grid-cols-3">
+              <table>
+                <td x-text="selectedFile.name"></td>
+                <td x-text="selectedFile.size"></td>
+              </table>
+              <div class="flex justify-end mb-4">
+                <a
+                  :href="`/api/files/${selectedFile.id}`"
+                  :download="selectedFile.name"
+                  class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded"
+                >
+                  Download
+                </a>
+              </div>
+              <div>
+                <button
+                  @click="fullscreenImageUrl = '/api/files/' + selectedFile.id; showFullscreenImage = true"
+                  class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+                >
+                  Expand Image
+                </button>
+              </div>
+            </div>
+          </div>
+        </template>
+        <template
+          x-if="selectedFile.type && selectedFile.type.startsWith('video/')"
+        >
+          <video
+            controls
+            :src="`/api/files/${selectedFile.id}`"
+            class="max-w-full h-auto"
+          ></video>
+        </template>
+        <template
+          x-if="!selectedFile.type || (!selectedFile.type.startsWith('image/') && !selectedFile.type.startsWith('video/'))"
+        >
+          <p>
+            Preview not available for this file type:
+            <span x-text="selectedFile.type"></span>
+          </p>
+        </template>
+      </div>
+    </div>
+
+    <!-- Fullscreen Image Modal -->
+    <div
+      x-show="showFullscreenImage"
+      class="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50"
+      x-transition:enter="transition ease-out duration-300"
+      x-transition:enter-start="opacity-0"
+      x-transition:enter-end="opacity-100"
+      x-transition:leave="transition ease-in duration-200"
+      x-transition:leave-start="opacity-100"
+      x-transition:leave-end="opacity-0"
+    >
+      <div class="relative max-w-full max-h-full">
+        <button
+          @click="showFullscreenImage = false"
+          class="absolute top-4 right-4 text-white hover:text-gray-300 text-4xl"
+        >
+          &times;
+        </button>
+        <img
+          :src="fullscreenImageUrl"
+          class="max-w-full max-h-screen object-contain"
+        />
+      </div>
+    </div>
+  </div>
 </body>
 
-<x-html>
+<x-html> </x-html>
