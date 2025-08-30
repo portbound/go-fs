@@ -1,0 +1,26 @@
+<html>
+
+<head>
+        <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+</head>
+
+<body>
+        <div x-data="{ files: [] }" x-init="
+        fetch('/api/files')
+            .then(response => response.json())
+            .then(data => {
+                files = data;
+                console.log(data); 
+            })
+            .catch(error => {
+                console.error('Error fetching data:', error);
+                isLoading = false;
+            });
+        ">
+                <template x-for="file in files" :key="file.id">
+                        <img :src="`/api/files/${file['thumb-id']}`" :alt="`Thumbnail for ${file.name}`">
+                </template>
+        </div>
+</body>
+
+<x-html>

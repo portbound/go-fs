@@ -47,6 +47,16 @@ func main() {
 	mux := http.NewServeMux()
 	apiHandler.RegisterRoutes(mux)
 
+	// Serve static files from the 'web/public' directory
+	webPublicPath := filepath.Join(".", "web", "public")
+	mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/" {
+			http.ServeFile(w, r, filepath.Join(webPublicPath, "index.html"))
+			return
+		}
+		http.FileServer(http.Dir(webPublicPath)).ServeHTTP(w, r)
+	}))
+
 	log.Printf("starting server on port %s\n", cfg.ServerPort)
 	if err := http.ListenAndServe(cfg.ServerPort, mux); err != nil {
 		log.Fatalf("error: server failed to start: %v", err)
