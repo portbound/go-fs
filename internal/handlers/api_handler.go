@@ -19,7 +19,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/portbound/go-fs/internal/models"
-	"github.com/portbound/go-fs/internal/services")
+	"github.com/portbound/go-fs/internal/services"
+)
 
 type APIHandler struct {
 	fileService     *services.FileService
@@ -121,7 +122,9 @@ func (h *APIHandler) handleDownloadFile(w http.ResponseWriter, r *http.Request) 
 	defer gcsReader.Close()
 
 	w.Header().Set("Content-Type", fm.ContentType)
-	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", fm.Name))
+
+	// I don't think we want to download this by default but leaving here in the code for now
+	// w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", fm.Name))
 	w.WriteHeader(http.StatusOK)
 
 	if _, err := io.Copy(w, gcsReader); err != nil {
