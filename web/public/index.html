@@ -1,48 +1,300 @@
 <!doctype html>
-<head>
-  <script
-    defer
-    src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"
-  ></script>
-  <script
-    defer
-    src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"
-  ></script>
-</head>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>go-fs</title>
+    <script src="/js/app.js" defer></script>
+    <script
+      defer
+      src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"
+    ></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
+    />
+    <style>
+      [x-cloak] {
+        display: none !important;
+      }
+    </style>
+  </head>
+  <body class="bg-gray-900 text-white font-sans">
+    <div x-data="fileManager" x-cloak class="container mx-auto px-4 py-8">
+      <!-- Navbar -->
+      <nav class="bg-gray-800 rounded-lg shadow-lg mb-8">
+        <div class="mx-auto max-w-7xl px-4">
+          <div class="flex justify-between h-16">
+            <div class="flex items-center">
+              <i class="fas fa-folder-open text-2xl text-indigo-400 mr-3"></i>
+              <span class="text-xl font-bold">go-fs</span>
+            </div>
+            <div class="flex items-center">
+              <button
+                @click="showUploadModal = true"
+                class="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg flex items-center transition-colors"
+              >
+                <i class="fas fa-upload mr-2"></i>
+                <span>Upload</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </nav>
 
-<body class="p-8 bg-slate-700">
-  <div x-html="navbarHtml"></div>
-  <div
-    x-data="{ 
-      files: [], 
-      showPopover: false, 
-      selectedFile: {}, showFullscreenImage: false, fullscreenImageUrl: '', navbarHtml: '', fileGridHtml: '', popoverHtml: '', fullscreenImageModalHtml: '' }"
-    x-init="
-        fetch('/partials/_navbar.html').then(response => response.text()).then(html => navbarHtml = html);
-        fetch('/partials/_file_grid.html').then(response => response.text()).then(html => fileGridHtml = html);
-        fetch('/partials/_popover.html').then(response => response.text()).then(html => popoverHtml = html);
-        fetch('/partials/_fullscreen_image_modal.html').then(response => response.text()).then(html => fullscreenImageModalHtml = html);
-        fetch('/api/files')
-            .then(response => response.json())
-            .then(data => {
-                files = data;
-                console.log(data); 
-            })
-            .catch(error => {
-                console.error('Error fetching data:', error);
-                isLoading = false;
-            });
-        "
-    class="grid"
-  >
-    <div x-html="navbarHtml"></div>
+      <!-- Loading indicator -->
+      <div x-show="isLoading" class="text-center py-16">
+        <i class="fas fa-spinner fa-spin text-4xl text-indigo-400"></i>
+        <p class="mt-4 text-lg">Loading files...</p>
+      </div>
 
-    <div x-html="fileGridHtml" class="grid grid-cols"></div>
+      <!-- File Grid -->
+      <div x-show="!isLoading && Object.keys(files).length > 0">
+        <template x-for="(date, index) in sortedDates" :key="index">
+          <div>
+            <h2
+              class="text-xl font-bold text-gray-300 mt-8 mb-4"
+              x-text="formatDate(date)"
+            ></h2>
+            <div
+              class="grid grid-cols-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4"
+            >
+              <template x-for="file in files[date]" :key="file.id">
+                <div
+                  @click="handleFileClick(file)"
+                  class="relative aspect-square bg-gray-800 rounded-lg overflow-hidden cursor-pointer group hover:shadow-lg hover:shadow-indigo-500/20 transition-shadow duration-300"
+                >
+                  <img
+                    :src="`/api/files/${file['thumb-id']}`"
+                    :alt="`Thumbnail for ${file.name}`"
+                    class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                  />
+                  <div
+                    class="absolute inset-0 bg-black bg-opacity-50 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end p-2"
+                  >
+                    <p
+                      class="text-white text-xs font-medium truncate"
+                      x-text="file.name"
+                    ></p>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </div>
+        </template>
+      </div>
 
-    <div x-html="popoverHtml"></div>
+      <!-- Empty state -->
+      <div
+        x-show="!isLoading && Object.keys(files).length === 0"
+        class="text-center py-16 bg-gray-800 rounded-lg"
+      >
+        <i class="fas fa-box-open text-4xl text-gray-500"></i>
+        <p class="mt-4 text-lg text-gray-400">No files found.</p>
+        <p class="text-sm text-gray-500">Upload some files to get started.</p>
+      </div>
 
-    <div x-html="fullscreenImageModalHtml"></div>
-  </div>
-</body>
+      <!-- Popover/Modal for file details -->
+      <div
+        x-show="showPopover"
+        @keydown.escape.window="showPopover = false"
+        class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4"
+      >
+        <div
+          @click.away="showPopover = false"
+          class="bg-gray-800 rounded-lg shadow-xl max-w-3xl w-full max-h-full overflow-y-auto"
+        >
+          <div class="p-6">
+            <div class="flex justify-between items-start">
+              <h3
+                class="text-2xl font-bold mb-4"
+                x-text="selectedFile.name"
+              ></h3>
+              <button
+                @click="showPopover = false"
+                class="text-gray-400 hover:text-white text-2xl"
+              >
+                &times;
+              </button>
+            </div>
 
-<x-html> </x-html>
+            <div class="grid md:grid-cols-2 gap-6">
+              <div>
+                <template
+                  x-if="selectedFile.type && selectedFile.type.startsWith('image/')"
+                >
+                  <img
+                    :src="`/api/files/${selectedFile.id}`"
+                    :alt="selectedFile.name"
+                    class="rounded-lg max-w-full h-auto max-h-96 mx-auto"
+                  />
+                </template>
+                <template
+                  x-if="selectedFile.type && selectedFile.type.startsWith('video/')"
+                >
+                  <video
+                    controls
+                    :src="`/api/files/${selectedFile.id}`"
+                    class="rounded-lg max-w-full h-auto max-h-96 mx-auto"
+                  ></video>
+                </template>
+                <template
+                  x-if="!selectedFile.type || (!selectedFile.type.startsWith('image/') && !selectedFile.type.startsWith('video/'))"
+                >
+                  <div
+                    class="bg-gray-700 rounded-lg flex items-center justify-center h-64"
+                  >
+                    <div class="text-center">
+                      <i class="fas fa-file text-6xl text-gray-500"></i>
+                      <p class="mt-4">Preview not available</p>
+                    </div>
+                  </div>
+                </template>
+              </div>
+              <div>
+                <h4 class="font-bold text-lg mb-2">File Details</h4>
+                <div class="space-y-2 text-gray-300">
+                  <p>
+                    <strong>Size:</strong>
+                    <span x-text="formatBytes(selectedFile.size)"></span>
+                  </p>
+                  <p>
+                    <strong>Type:</strong>
+                    <span x-text="selectedFile.type"></span>
+                  </p>
+                  <p>
+                    <strong>Uploaded:</strong>
+                    <span
+                      x-text="new Date(selectedFile['upload-date']).toLocaleString()"
+                    ></span>
+                  </p>
+                  <p>
+                    <strong>Owner:</strong>
+                    <span x-text="selectedFile.owner"></span>
+                  </p>
+                </div>
+                <div class="mt-6 flex space-x-4">
+                  <a
+                    :href="`/api/files/${selectedFile.id}`"
+                    :download="selectedFile.name"
+                    class="flex-1 text-center bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg transition-colors"
+                    >Download</a
+                  >
+                  <button
+                    @click="openFullscreen"
+                    x-show="selectedFile.type && selectedFile.type.startsWith('image/')"
+                    class="flex-1 bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg transition-colors"
+                  >
+                    Expand
+                  </button>
+                  <button
+                    @click="deleteFile(selectedFile.id)"
+                    class="flex-1 bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg transition-colors"
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Fullscreen Image Modal -->
+      <div
+        x-show="showFullscreenImage"
+        @keydown.escape.window="showFullscreenImage = false"
+        class="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50"
+      >
+        <div @click.away="showFullscreenImage = false" class="relative">
+          <img
+            :src="fullscreenImageUrl"
+            class="max-w-screen-xl max-h-screen object-contain"
+          />
+        </div>
+        <button
+          @click="showFullscreenImage = false"
+          class="absolute top-4 right-4 text-white hover:text-gray-300 text-4xl"
+        >
+          &times;
+        </button>
+      </div>
+
+      <!-- Upload Modal -->
+      <div
+        x-show="showUploadModal"
+        @keydown.escape.window="showUploadModal = false"
+        class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4"
+      >
+        <div
+          @click.away="showUploadModal = false"
+          class="bg-gray-800 rounded-lg shadow-xl max-w-lg w-full"
+        >
+          <div class="p-6">
+            <div class="flex justify-between items-start">
+              <h3 class="text-2xl font-bold mb-4">Upload Files</h3>
+              <button
+                @click="showUploadModal = false"
+                class="text-gray-400 hover:text-white text-2xl"
+              >
+                &times;
+              </button>
+            </div>
+            <div x-show="!isUploading">
+              <div
+                @dragover.prevent
+                @drop.prevent="handleDrop"
+                class="border-2 border-dashed border-gray-600 rounded-lg p-8 text-center cursor-pointer hover:border-indigo-400 hover:bg-gray-700 transition-colors"
+              >
+                <input
+                  type="file"
+                  multiple
+                  @change="handleFileSelect"
+                  class="hidden"
+                  id="file-upload"
+                />
+                <label for="file-upload" class="cursor-pointer">
+                  <i
+                    class="fas fa-cloud-upload-alt text-4xl text-gray-500 mb-4"
+                  ></i>
+                  <p>
+                    Drag and drop files here, or click the cloud to select
+                    files.
+                  </p>
+                </label>
+              </div>
+              <div
+                x-show="filesToUpload.length > 0"
+                class="mt-4 max-h-32 overflow-y-auto"
+              >
+                <p class="font-bold mb-2">Selected files:</p>
+                <ul>
+                  <template x-for="file in filesToUpload" :key="file.name">
+                    <li
+                      x-text="file.name"
+                      class="text-sm text-gray-400 truncate"
+                    ></li>
+                  </template>
+                </ul>
+              </div>
+            </div>
+            <div x-show="isUploading" class="text-center py-8">
+              <i class="fas fa-spinner fa-spin text-3xl text-indigo-400"></i>
+              <p class="mt-3">Uploading...</p>
+            </div>
+            <div class="mt-6 text-right">
+              <button
+                @click="uploadFiles"
+                :disabled="filesToUpload.length === 0 || isUploading"
+                class="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg disabled:bg-gray-600 disabled:cursor-not-allowed transition-colors"
+              >
+                Upload
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
