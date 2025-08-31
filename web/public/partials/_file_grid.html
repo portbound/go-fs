@@ -1,0 +1,9 @@
+    <template x-for="file in files" :key="file.id">
+      <div @click="selectedFile = file; showPopover = true">
+        <img
+          :src="`/api/files/${file['thumb-id']}`"
+          :alt="`Thumbnail for ${file.name}`"
+          class="rounded-lg"
+        />
+      </div>
+    </template>
