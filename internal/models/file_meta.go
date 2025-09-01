@@ -4,12 +4,12 @@ import "time"
 
 type FileMeta struct {
 	ID          string    `json:"id"`
-	ParentID    string    `json:"parent-id"`
-	ThumbID     string    `json:"thumb-id"`
+	ParentID    string    `json:"parentId"`
+	ThumbID     string    `json:"thumbId"`
 	Name        string    `json:"name"`
 	ContentType string    `json:"type"`
 	Size        int64     `json:"size"`
-	UploadDate  time.Time `json:"upload-date"`
+	UploadDate  time.Time `json:"uploadDate"`
 	Owner       string    `json:"owner"`
-	TmpFilePath string    `json:"tmp-file"`
+	TmpFilePath string    `json:"tmpFile"`
 }

@@ -66,7 +66,7 @@
                   class="relative aspect-square bg-gray-800 rounded-lg overflow-hidden cursor-pointer group hover:shadow-lg hover:shadow-indigo-500/20 transition-shadow duration-300"
                 >
                   <img
-                    :src="`/api/files/${file['thumb-id']}`"
+                    :src="`/api/files/${file['thumbId']}`"
                     :alt="`Thumbnail for ${file.name}`"
                     class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
                   />
@@ -166,7 +166,7 @@
                   <p>
                     <strong>Uploaded:</strong>
                     <span
-                      x-text="new Date(selectedFile['upload-date']).toLocaleString()"
+                      x-text="new Date(selectedFile['uploadDate']).toLocaleString()"
                     ></span>
                   </p>
                   <p>
@@ -242,10 +242,11 @@
               </button>
             </div>
             <div x-show="!isUploading">
-              <div
+              <label
+                for="file-upload"
                 @dragover.prevent
                 @drop.prevent="handleDrop"
-                class="border-2 border-dashed border-gray-600 rounded-lg p-8 text-center cursor-pointer hover:border-indigo-400 hover:bg-gray-700 transition-colors"
+                class="border-2 border-dashed border-gray-600 rounded-lg p-8 text-center cursor-pointer hover:border-indigo-400 hover:bg-gray-700 transition-colors block"
               >
                 <input
                   type="file"
@@ -254,16 +255,11 @@
                   class="hidden"
                   id="file-upload"
                 />
-                <label for="file-upload" class="cursor-pointer">
-                  <i
-                    class="fas fa-cloud-upload-alt text-4xl text-gray-500 mb-4"
-                  ></i>
-                  <p>
-                    Drag and drop files here, or click the cloud to select
-                    files.
-                  </p>
-                </label>
-              </div>
+                <i
+                  class="fas fa-cloud-upload-alt text-4xl text-gray-500 mb-4"
+                ></i>
+                <p>Drag and drop files here, or click to select files.</p>
+              </label>
               <div
                 x-show="filesToUpload.length > 0"
                 class="mt-4 max-h-32 overflow-y-auto"
