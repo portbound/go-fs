@@ -14,6 +14,18 @@ document.addEventListener('alpine:init', () => {
             this.fetchFiles();
         },
 
+        groupFilesByDate(files) {
+            const grouped = {};
+            files.forEach(file => {
+                const date = new Date(file['uploadDate']).toISOString().split('T')[0]; // Format as YYYY-MM-DD
+                if (!grouped[date]) {
+                    grouped[date] = [];
+                }
+                grouped[date].push(file);
+            });
+            return grouped;
+        },
+
         get sortedDates() {
             return Object.keys(this.files).sort((a, b) => b.localeCompare(a));
         },
@@ -34,12 +46,12 @@ document.addEventListener('alpine:init', () => {
                     return response.json();
                 })
                 .then(data => {
-                    if (typeof data === 'object' && data !== null) {
-                        this.files = data;
+                    if (Array.isArray(data)) {
+                        this.files = this.groupFilesByDate(data);
                     } else {
                         this.files = {};
                         if (data) {
-                             console.error("API did not return an object:", data);
+                            console.error("API did not return an array:", data);
                         }
                     }
                 })
@@ -115,35 +127,35 @@ document.addEventListener('alpine:init', () => {
                 method: 'POST',
                 body: formData,
             })
-            .then(response => {
-                if (response.status === 201) {
-                    return null; // Success with no content to parse
-                }
-                // For other statuses, try to parse error json
-                return response.json().then(data => {
-                    let errorMessage = 'Upload failed.';
-                    if (response.status === 207) { // Multi-Status
-                        errorMessage = data.join('\n');
-                    } else if (data && data.error) {
-                        errorMessage = data.error;
-                    } else if (Array.isArray(data)) {
-                        errorMessage = data.join('\n');
+                .then(response => {
+                    if (response.status === 201) {
+                        return null; // Success with no content to parse
                     }
-                    throw new Error(errorMessage);
+                    // For other statuses, try to parse error json
+                    return response.json().then(data => {
+                        let errorMessage = 'Upload failed.';
+                        if (response.status === 207) { // Multi-Status
+                            errorMessage = data.join('\n');
+                        } else if (data && data.error) {
+                            errorMessage = data.error;
+                        } else if (Array.isArray(data)) {
+                            errorMessage = data.join('\n');
+                        }
+                        throw new Error(errorMessage);
+                    });
+                })
+                .then(() => {
+                    this.showUploadModal = false;
+                    this.filesToUpload = [];
+                    this.fetchFiles(); // Refresh file list
+                })
+                .catch(error => {
+                    console.error('Error uploading files:', error);
+                    alert(`Upload failed: ${error.message}`);
+                })
+                .finally(() => {
+                    this.isUploading = false;
                 });
-            })
-            .then(() => {
-                this.showUploadModal = false;
-                this.filesToUpload = [];
-                this.fetchFiles(); // Refresh file list
-            })
-            .catch(error => {
-                console.error('Error uploading files:', error);
-                alert(`Upload failed: ${error.message}`);
-            })
-            .finally(() => {
-                this.isUploading = false;
-            });
         },
 
         formatBytes(bytes, decimals = 2) {
