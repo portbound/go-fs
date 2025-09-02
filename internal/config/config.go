@@ -15,7 +15,7 @@ type Config struct {
 	StorageProvider string
 	BucketName      string
 	TmpDir          string
-	LogsDir         string
+	LogDir          string
 }
 
 func Load() (*Config, error) {
@@ -31,7 +31,7 @@ func Load() (*Config, error) {
 		StorageProvider: os.Getenv("STORAGE_PROVIDER"),
 		BucketName:      os.Getenv("BUCKET_NAME"),
 		TmpDir:          os.Getenv("TMP_DIR"),
-		LogsDir:         os.Getenv("LOG_DIR"),
+		LogDir:          os.Getenv("LOG_DIR"),
 	}
 
 	if cfg.ServerPort == "" {
@@ -59,9 +59,9 @@ func Load() (*Config, error) {
 		os.Mkdir(cfg.TmpDir, 0755)
 	}
 
-	if cfg.LogsDir == "" {
-		cfg.LogsDir = "./local/logs"
-		os.Mkdir(cfg.LogsDir, 0755)
+	if cfg.LogDir == "" {
+		cfg.LogDir = "./local/logs"
+		os.Mkdir(cfg.LogDir, 0755)
 	}
 
 	return &cfg, nil

@@ -29,14 +29,14 @@ func main() {
 	}
 	defer db.Conn.Close()
 
-	storageRepo, err := buildStorageRepo(cfg.StorageProvider, cfg.BucketName)
+	storageRepo, err := setupStorage(cfg.StorageProvider, cfg.BucketName)
 	if err != nil {
-		log.Fatalf("failed to build storage repository: %v", err)
+		log.Fatalf("main.setupStorage failed: %v", err)
 	}
 
-	logFile, logger, err := SetupLogging(cfg.LogsDir)
+	logFile, logger, err := setupLogging(cfg.LogDir)
 	if err != nil {
-		log.Fatalf("failed to setup logging: %v", err)
+		log.Fatalf("main.setupLogging failed: %v", err)
 	}
 	defer logFile.Close()
 
@@ -45,12 +45,11 @@ func main() {
 	// userService := services.NewUserService(db)
 	fileService := services.NewFileService(storageRepo, fileMetaService, logger, cfg.TmpDir)
 
-	apiHandler := handlers.NewAPIHandler(fileService, fileMetaService)
-
 	mux := http.NewServeMux()
-	apiHandler.RegisterRoutes(mux)
-
 	mux.Handle("/", http.FileServer(http.Dir("./web/public")))
+
+	apiHandler := handlers.NewAPIHandler(fileService, fileMetaService)
+	apiHandler.RegisterRoutes(mux)
 
 	log.Printf("starting server on port %s\n", cfg.ServerPort)
 	if err := http.ListenAndServe(cfg.ServerPort, mux); err != nil {
@@ -67,7 +66,7 @@ func setupDB(driverName string, connStr string) (*sqlite.SQLiteDB, error) {
 	}
 }
 
-func buildStorageRepo(storageProvider, bucket string) (repositories.StorageRepository, error) {
+func setupStorage(storageProvider, bucket string) (repositories.StorageRepository, error) {
 	switch storageProvider {
 	case "gcs":
 		ctx := context.Background()
@@ -77,7 +76,7 @@ func buildStorageRepo(storageProvider, bucket string) (repositories.StorageRepos
 	}
 }
 
-func SetupLogging(dir string) (*os.File, *log.Logger, error) {
+func setupLogging(dir string) (*os.File, *log.Logger, error) {
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return nil, nil, fmt.Errorf("failed to create log directory '%s': %w", dir, err)
 	}

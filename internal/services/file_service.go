@@ -189,7 +189,7 @@ func (fs *FileService) processFile(ctx context.Context, fm *models.FileMeta) err
 
 	if err := fs.fileMetaService.SaveFileMeta(ctx, fm); err != nil {
 		if rbErr := fs.DeleteFile(ctx, fm.ID); rbErr != nil {
-			fs.logger.Printf("CRITICAL: failed to delete orphaned file %s from storage: %w", fm.Name, rbErr)
+			fs.logger.Printf("CRITICAL: failed to delete orphaned file %s from storage: %v", fm.Name, rbErr)
 		}
 		return fmt.Errorf("save metadata failed for %s: %w", fm.Name, err)
 	}

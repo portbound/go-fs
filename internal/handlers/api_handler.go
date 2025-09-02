@@ -122,9 +122,6 @@ func (h *APIHandler) handleDownloadFile(w http.ResponseWriter, r *http.Request) 
 	defer gcsReader.Close()
 
 	w.Header().Set("Content-Type", fm.ContentType)
-
-	// I don't think we want to download this by default but leaving here in the code for now
-	// w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", fm.Name))
 	w.WriteHeader(http.StatusOK)
 
 	if _, err := io.Copy(w, gcsReader); err != nil {
