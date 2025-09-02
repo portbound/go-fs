@@ -10,15 +10,15 @@ import (
 	"database/sql"
 )
 
-const create = `-- name: Create :exec
-INSERT INTO files (
+const createFileMeta = `-- name: CreateFileMeta :exec
+INSERT INTO file_meta (
 	id, parent_id, thumb_id, name, content_type, size, upload_date, owner
 ) VALUES (
 	?, ?, ?, ?, ?, ?, ?, ?
 )
 `
 
-type CreateParams struct {
+type CreateFileMetaParams struct {
 	ID          string         `json:"id"`
 	ParentID    sql.NullString `json:"parent_id"`
 	ThumbID     sql.NullString `json:"thumb_id"`
@@ -29,8 +29,8 @@ type CreateParams struct {
 	Owner       string         `json:"owner"`
 }
 
-func (q *Queries) Create(ctx context.Context, arg CreateParams) error {
-	_, err := q.exec(ctx, q.createStmt, create,
+func (q *Queries) CreateFileMeta(ctx context.Context, arg CreateFileMetaParams) error {
+	_, err := q.exec(ctx, q.createFileMetaStmt, createFileMeta,
 		arg.ID,
 		arg.ParentID,
 		arg.ThumbID,
@@ -43,51 +43,30 @@ func (q *Queries) Create(ctx context.Context, arg CreateParams) error {
 	return err
 }
 
-const delete = `-- name: Delete :exec
-DELETE FROM files 
+const deleteFileMeta = `-- name: DeleteFileMeta :exec
+DELETE FROM file_meta 
 WHERE id = ?
 `
 
-func (q *Queries) Delete(ctx context.Context, id string) error {
-	_, err := q.exec(ctx, q.deleteStmt, delete, id)
+func (q *Queries) DeleteFileMeta(ctx context.Context, id string) error {
+	_, err := q.exec(ctx, q.deleteFileMetaStmt, deleteFileMeta, id)
 	return err
 }
 
-const get = `-- name: Get :one
-SELECT id, parent_id, thumb_id, name, content_type, size, upload_date, owner FROM files 
-WHERE id = ? LIMIT 1
-`
-
-func (q *Queries) Get(ctx context.Context, id string) (File, error) {
-	row := q.queryRow(ctx, q.getStmt, get, id)
-	var i File
-	err := row.Scan(
-		&i.ID,
-		&i.ParentID,
-		&i.ThumbID,
-		&i.Name,
-		&i.ContentType,
-		&i.Size,
-		&i.UploadDate,
-		&i.Owner,
-	)
-	return i, err
-}
-
-const getAll = `-- name: GetAll :many
-SELECT id, parent_id, thumb_id, name, content_type, size, upload_date, owner FROM files
+const getAllFileMeta = `-- name: GetAllFileMeta :many
+SELECT id, parent_id, thumb_id, name, content_type, size, upload_date, owner FROM file_meta
 ORDER BY upload_date
 `
 
-func (q *Queries) GetAll(ctx context.Context) ([]File, error) {
-	rows, err := q.query(ctx, q.getAllStmt, getAll)
+func (q *Queries) GetAllFileMeta(ctx context.Context) ([]FileMetum, error) {
+	rows, err := q.query(ctx, q.getAllFileMetaStmt, getAllFileMeta)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []File
+	var items []FileMetum
 	for rows.Next() {
-		var i File
+		var i FileMetum
 		if err := rows.Scan(
 			&i.ID,
 			&i.ParentID,
@@ -109,4 +88,42 @@ func (q *Queries) GetAll(ctx context.Context) ([]File, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const getFileMeta = `-- name: GetFileMeta :one
+SELECT id, parent_id, thumb_id, name, content_type, size, upload_date, owner FROM file_meta 
+WHERE id = ? LIMIT 1
+`
+
+func (q *Queries) GetFileMeta(ctx context.Context, id string) (FileMetum, error) {
+	row := q.queryRow(ctx, q.getFileMetaStmt, getFileMeta, id)
+	var i FileMetum
+	err := row.Scan(
+		&i.ID,
+		&i.ParentID,
+		&i.ThumbID,
+		&i.Name,
+		&i.ContentType,
+		&i.Size,
+		&i.UploadDate,
+		&i.Owner,
+	)
+	return i, err
+}
+
+const getUser = `-- name: GetUser :one
+SELECT id, email, token, bucket_name FROM users 
+WHERE email = ? LIMIT 1
+`
+
+func (q *Queries) GetUser(ctx context.Context, email string) (User, error) {
+	row := q.queryRow(ctx, q.getUserStmt, getUser, email)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.Token,
+		&i.BucketName,
+	)
+	return i, err
 }

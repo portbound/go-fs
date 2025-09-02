@@ -1,4 +1,11 @@
-CREATE TABLE IF NOT EXISTS files (
+CREATE TABLE IF NOT EXISTS users (
+		id TEXT NOT NULL PRIMARY KEY,
+		email TEXT NOT NULL UNIQUE, 
+		token TEXT,
+		bucket_name TEXT NOT NULL UNIQUE
+)
+
+CREATE TABLE IF NOT EXISTS file_meta (
 		id TEXT NOT NULL PRIMARY KEY, 
 		parent_id TEXT,
 		thumb_id TEXT,

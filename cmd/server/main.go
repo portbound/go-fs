@@ -23,10 +23,11 @@ func main() {
 		log.Fatalf("failed to load config: %v", err)
 	}
 
-	fileRepo, err := buildFileRepo(cfg.DatabaseENG, cfg.DatabaseURL)
+	db, err := setupDB(cfg.DBEngine, cfg.DBConnStr)
 	if err != nil {
-		log.Fatalf("failed to build file repository: %v", err)
+		log.Fatalf("main.setupDB failed: %v", err)
 	}
+	defer db.Conn.Close()
 
 	storageRepo, err := buildStorageRepo(cfg.StorageProvider, cfg.BucketName)
 	if err != nil {
@@ -39,7 +40,9 @@ func main() {
 	}
 	defer logFile.Close()
 
-	fileMetaService := services.NewFileMetaService(fileRepo)
+	fileMetaService := services.NewFileMetaService(db)
+	// TODO: Add middleware to consume userService
+	// userService := services.NewUserService(db)
 	fileService := services.NewFileService(storageRepo, fileMetaService, logger, cfg.TmpDir)
 
 	apiHandler := handlers.NewAPIHandler(fileService, fileMetaService)
@@ -55,12 +58,12 @@ func main() {
 	}
 }
 
-func buildFileRepo(dbEngine, dbURL string) (repositories.FileRepository, error) {
-	switch dbEngine {
-	case "sqlite":
-		return sqlite.NewDB(dbURL)
+func setupDB(driverName string, connStr string) (*sqlite.SQLiteDB, error) {
+	switch driverName {
+	case "sqlite3":
+		return sqlite.NewSQLiteDB(connStr)
 	default:
-		return nil, fmt.Errorf("unsupported database engine: %s", dbEngine)
+		return nil, fmt.Errorf("unsupported database engine: %s", driverName)
 	}
 }
 
