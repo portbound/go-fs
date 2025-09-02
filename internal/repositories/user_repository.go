@@ -7,5 +7,5 @@ import (
 )
 
 type UserRepository interface {
-	GetUser(ctx context.Context, token string) (*models.User, error)
+	GetUser(ctx context.Context, email string) (*models.User, error)
 }

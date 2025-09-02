@@ -16,6 +16,7 @@ type Config struct {
 	BucketName      string
 	TmpDir          string
 	LogDir          string
+	GoogleClientID  string
 }
 
 func Load() (*Config, error) {
@@ -32,6 +33,7 @@ func Load() (*Config, error) {
 		BucketName:      os.Getenv("BUCKET_NAME"),
 		TmpDir:          os.Getenv("TMP_DIR"),
 		LogDir:          os.Getenv("LOG_DIR"),
+		GoogleClientID:  os.Getenv("GOOGLE_CLIENT_ID"),
 	}
 
 	if cfg.ServerPort == "" {
@@ -62,6 +64,10 @@ func Load() (*Config, error) {
 	if cfg.LogDir == "" {
 		cfg.LogDir = "./local/logs"
 		os.Mkdir(cfg.LogDir, 0755)
+	}
+
+	if cfg.GoogleClientID == "" {
+		return nil, fmt.Errorf("GOOGLE_CLIENT_ID is required but was undefined")
 	}
 
 	return &cfg, nil

@@ -13,6 +13,7 @@ import (
 	"github.com/portbound/go-fs/internal/handlers"
 	"github.com/portbound/go-fs/internal/infrastructure/database/sqlite"
 	"github.com/portbound/go-fs/internal/infrastructure/storage/gcs"
+	"github.com/portbound/go-fs/internal/middleware"
 	"github.com/portbound/go-fs/internal/repositories"
 	"github.com/portbound/go-fs/internal/services"
 )
@@ -41,18 +42,24 @@ func main() {
 	defer logFile.Close()
 
 	fileMetaService := services.NewFileMetaService(db)
-	// TODO: Add middleware to consume userService
-	// userService := services.NewUserService(db)
+	userService := services.NewUserService(db)
 	fileService := services.NewFileService(storageRepo, fileMetaService, logger, cfg.TmpDir)
 
 	mux := http.NewServeMux()
-	mux.Handle("/", http.FileServer(http.Dir("./web/public")))
-
+	webHandler := handlers.NewWebHandler()
+	webHandler.RegisterRoutes(mux)
 	apiHandler := handlers.NewAPIHandler(fileService, fileMetaService)
 	apiHandler.RegisterRoutes(mux)
 
+	server := http.Server{
+		Addr:    cfg.ServerPort,
+		Handler: middleware.GoogleAuthMiddleware(cfg.GoogleClientID, userService, mux),
+		// Handler: middleware.Logging(mux),
+	}
+
 	log.Printf("starting server on port %s\n", cfg.ServerPort)
-	if err := http.ListenAndServe(cfg.ServerPort, mux); err != nil {
+
+	if err := server.ListenAndServe(); err != nil {
 		log.Fatalf("error: server failed to start: %v", err)
 	}
 }
