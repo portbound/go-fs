@@ -9,10 +9,11 @@ import (
 )
 
 type Querier interface {
-	Create(ctx context.Context, arg CreateParams) error
-	Delete(ctx context.Context, id string) error
-	Get(ctx context.Context, id string) (File, error)
-	GetAll(ctx context.Context) ([]File, error)
+	CreateFileMeta(ctx context.Context, arg CreateFileMetaParams) error
+	DeleteFileMeta(ctx context.Context, id string) error
+	GetAllFileMeta(ctx context.Context) ([]FileMetum, error)
+	GetFileMeta(ctx context.Context, id string) (FileMetum, error)
+	GetUser(ctx context.Context, email string) (User, error)
 }
 
 var _ Querier = (*Queries)(nil)

@@ -8,7 +8,7 @@ import (
 	"database/sql"
 )
 
-type File struct {
+type FileMetum struct {
 	ID          string         `json:"id"`
 	ParentID    sql.NullString `json:"parent_id"`
 	ThumbID     sql.NullString `json:"thumb_id"`
@@ -17,4 +17,11 @@ type File struct {
 	Size        int64          `json:"size"`
 	UploadDate  string         `json:"upload_date"`
 	Owner       string         `json:"owner"`
+}
+
+type User struct {
+	ID         string         `json:"id"`
+	Email      string         `json:"email"`
+	Token      sql.NullString `json:"token"`
+	BucketName string         `json:"bucket_name"`
 }

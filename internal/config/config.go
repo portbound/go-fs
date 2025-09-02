@@ -10,8 +10,8 @@ import (
 
 type Config struct {
 	ServerPort      string
-	DatabaseURL     string
-	DatabaseENG     string
+	DBConnStr       string
+	DBEngine        string
 	StorageProvider string
 	BucketName      string
 	TmpDir          string
@@ -26,8 +26,8 @@ func Load() (*Config, error) {
 
 	cfg := Config{
 		ServerPort:      os.Getenv("SERVER_PORT"),
-		DatabaseURL:     os.Getenv("DATABASE_URL"),
-		DatabaseENG:     os.Getenv("DATABASE_ENG"),
+		DBConnStr:       os.Getenv("DB_CONNECTION_STRING"),
+		DBEngine:        os.Getenv("DB_ENGINE"),
 		StorageProvider: os.Getenv("STORAGE_PROVIDER"),
 		BucketName:      os.Getenv("BUCKET_NAME"),
 		TmpDir:          os.Getenv("TMP_DIR"),
@@ -38,11 +38,11 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("SERVER_PORT is required but was undefined")
 	}
 
-	if cfg.DatabaseURL == "" {
+	if cfg.DBConnStr == "" {
 		return nil, fmt.Errorf("DATABASE_URL is required but was undefined")
 	}
 
-	if cfg.DatabaseENG == "" {
+	if cfg.DBEngine == "" {
 		return nil, fmt.Errorf("DATABASE_ENG is required but was undefined")
 	}
 
