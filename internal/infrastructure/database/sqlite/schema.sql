@@ -3,7 +3,7 @@ CREATE TABLE IF NOT EXISTS users (
 		email TEXT NOT NULL UNIQUE, 
 		token TEXT,
 		bucket_name TEXT NOT NULL UNIQUE
-)
+);
 
 CREATE TABLE IF NOT EXISTS file_meta (
 		id TEXT NOT NULL PRIMARY KEY, 
