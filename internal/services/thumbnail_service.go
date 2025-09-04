@@ -14,13 +14,7 @@ import (
 	"github.com/portbound/go-fs/internal/models"
 )
 
-type ThumbnailService struct{}
-
-func NewThumbnailService() *ThumbnailService {
-	return &ThumbnailService{}
-}
-
-func (ts *ThumbnailService) Generate(ctx context.Context, fm *models.FileMeta) (io.Reader, error) {
+func GenerateThumbnail(ctx context.Context, fm *models.FileMeta) (io.Reader, error) {
 	thumbPath := fmt.Sprintf("./local/tmp/thumb-%s.jpg", fm.Name)
 
 	cmd := exec.CommandContext(ctx, "ffmpeg",

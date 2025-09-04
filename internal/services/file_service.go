@@ -18,20 +18,18 @@ import (
 )
 
 type FileService struct {
-	storage          repositories.StorageRepository
-	thumbnailService *ThumbnailService
-	fileMetaService  *FileMetaService
-	logger           *log.Logger
-	tmpDir           string
+	storage         repositories.StorageRepository
+	fileMetaService *FileMetaService
+	logger          *log.Logger
+	tmpDir          string
 }
 
 func NewFileService(storageRepo repositories.StorageRepository, fileMetaService *FileMetaService, logger *log.Logger, tmpDir string) *FileService {
 	return &FileService{
-		storage:          storageRepo,
-		thumbnailService: NewThumbnailService(),
-		fileMetaService:  fileMetaService,
-		logger:           logger,
-		tmpDir:           tmpDir,
+		storage:         storageRepo,
+		fileMetaService: fileMetaService,
+		logger:          logger,
+		tmpDir:          tmpDir,
 	}
 }
 
@@ -57,7 +55,7 @@ func (fs *FileService) ProcessBatch(ctx context.Context, batch []*models.FileMet
 				return
 			}
 
-			thumbnailReader, err := fs.thumbnailService.Generate(ctx, fm)
+			thumbnailReader, err := GenerateThumbnail(ctx, fm)
 			if err != nil {
 				ch <- fmt.Errorf("services.ProcessBatch: failed to generate thumbnail for '%s': %w", fm.Name, err)
 				return
