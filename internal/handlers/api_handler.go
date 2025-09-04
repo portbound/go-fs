@@ -19,6 +19,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/portbound/go-fs/internal/models"
+	"github.com/portbound/go-fs/internal/response"
 	"github.com/portbound/go-fs/internal/services"
 )
 
@@ -45,7 +46,7 @@ func (h *APIHandler) handleUploadFile(w http.ResponseWriter, r *http.Request) {
 
 	_, params, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
 	if err != nil {
-		WriteJSONError(w, http.StatusBadRequest, err.Error())
+		response.WriteJSONError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -56,7 +57,7 @@ func (h *APIHandler) handleUploadFile(w http.ResponseWriter, r *http.Request) {
 			if err == io.EOF {
 				break
 			}
-			WriteJSONError(w, http.StatusInternalServerError, err.Error())
+			response.WriteJSONError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
 		defer part.Close()
@@ -93,30 +94,30 @@ func (h *APIHandler) handleUploadFile(w http.ResponseWriter, r *http.Request) {
 		for _, err := range errs {
 			errMessages = append(errMessages, err.Error())
 		}
-		WriteJSON(w, http.StatusMultiStatus, errMessages)
+		response.WriteJSON(w, http.StatusMultiStatus, errMessages)
 		return
 	}
 	var fm []*models.FileMeta
 	for _, item := range batch {
 		fm = append(fm, item)
 	}
-	WriteJSON(w, http.StatusCreated, nil)
+	response.WriteJSON(w, http.StatusCreated, nil)
 }
 
 func (h *APIHandler) handleDownloadFile(w http.ResponseWriter, r *http.Request) {
 	fm, err := h.fileMetaService.LookupFileMeta(r.Context(), r.PathValue("id"))
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			WriteJSONError(w, http.StatusNotFound, err.Error())
+			response.WriteJSONError(w, http.StatusNotFound, err.Error())
 			return
 		}
-		WriteJSONError(w, http.StatusInternalServerError, err.Error())
+		response.WriteJSONError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
 	gcsReader, err := h.fileService.DownloadFile(r.Context(), fm.ID)
 	if err != nil {
-		WriteJSONError(w, http.StatusInternalServerError, err.Error())
+		response.WriteJSONError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	defer gcsReader.Close()
@@ -132,10 +133,10 @@ func (h *APIHandler) handleDownloadFile(w http.ResponseWriter, r *http.Request) 
 func (h *APIHandler) handleGetFileMeta(w http.ResponseWriter, r *http.Request) {
 	afm, err := h.fileMetaService.LookupAllFileMeta(r.Context())
 	if err != nil {
-		WriteJSONError(w, http.StatusInternalServerError, err.Error())
+		response.WriteJSONError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	WriteJSON(w, http.StatusOK, afm)
+	response.WriteJSON(w, http.StatusOK, afm)
 }
 
 func (h *APIHandler) handleDeleteFile(w http.ResponseWriter, r *http.Request) {
@@ -143,7 +144,7 @@ func (h *APIHandler) handleDeleteFile(w http.ResponseWriter, r *http.Request) {
 
 	fm, err := h.fileMetaService.LookupFileMeta(r.Context(), r.PathValue("id"))
 	if err != nil {
-		WriteJSONError(w, http.StatusNotFound, err.Error())
+		response.WriteJSONError(w, http.StatusNotFound, err.Error())
 		return
 	}
 
@@ -168,16 +169,16 @@ func (h *APIHandler) handleDeleteFile(w http.ResponseWriter, r *http.Request) {
 		for _, err := range errs {
 			errMessages = append(errMessages, err.Error())
 		}
-		WriteJSON(w, http.StatusMultiStatus, errMessages)
+		response.WriteJSON(w, http.StatusMultiStatus, errMessages)
 		return
 	}
-	WriteJSON(w, http.StatusNoContent, nil)
+	response.WriteJSON(w, http.StatusNoContent, nil)
 }
 
 func (h *APIHandler) handleDeleteBatch(w http.ResponseWriter, r *http.Request) {
 	var ids []string
 	if err := json.NewDecoder(r.Body).Decode(&ids); err != nil {
-		WriteJSONError(w, http.StatusBadRequest, err.Error())
+		response.WriteJSONError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -218,9 +219,9 @@ func (h *APIHandler) handleDeleteBatch(w http.ResponseWriter, r *http.Request) {
 			for err := range ch {
 				errMessages = append(errMessages, err.Error())
 			}
-			WriteJSON(w, http.StatusMultiStatus, errMessages)
+			response.WriteJSON(w, http.StatusMultiStatus, errMessages)
 			return
 		}
 	}()
-	WriteJSON(w, http.StatusNoContent, nil)
+	response.WriteJSON(w, http.StatusNoContent, nil)
 }
