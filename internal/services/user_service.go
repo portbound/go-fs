@@ -12,7 +12,7 @@ type UserService struct {
 }
 
 func NewUserService(userRepo repositories.UserRepository) *UserService {
-	return &UserService{}
+	return &UserService{db: userRepo}
 }
 
 func (us *UserService) GetUser(ctx context.Context, email string) (*models.User, error) {
