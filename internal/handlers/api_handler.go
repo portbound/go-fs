@@ -33,11 +33,11 @@ func NewAPIHandler(fs *services.FileService, fms *services.FileMetaService) *API
 }
 
 func (h *APIHandler) RegisterRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("GET /api/files", h.handleGetFileMeta)
-	mux.HandleFunc("POST /api/files", h.handleUploadFile)
-	mux.HandleFunc("GET /api/files/{id}", h.handleDownloadFile)
-	mux.HandleFunc("DELETE /api/files/{id}", h.handleDeleteFile)
-	mux.HandleFunc("POST /api/files/delete-batch", h.handleDeleteBatch)
+	mux.HandleFunc("GET /files", h.handleGetFileMeta)
+	mux.HandleFunc("POST /files", h.handleUploadFile)
+	mux.HandleFunc("GET /files/{id}", h.handleDownloadFile)
+	mux.HandleFunc("DELETE /files/{id}", h.handleDeleteFile)
+	mux.HandleFunc("POST /files/delete-batch", h.handleDeleteBatch)
 }
 
 func (h *APIHandler) handleUploadFile(w http.ResponseWriter, r *http.Request) {

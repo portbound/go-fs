@@ -2,15 +2,13 @@ package middleware
 
 import (
 	"context"
-	"log"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
+	"github.com/portbound/go-fs/internal/auth"
 	"github.com/portbound/go-fs/internal/response"
 	"github.com/portbound/go-fs/internal/services"
-	"google.golang.org/api/idtoken"
 )
 
 type contextKey string
@@ -18,59 +16,52 @@ type contextKey string
 const userEmailKey contextKey = "userEmail"
 
 type AuthMiddleware struct {
-	userService *services.UserService
+	authenticator *auth.Authenticator
+	userService   *services.UserService
 }
 
-func NewAuthMiddleware(us *services.UserService) *AuthMiddleware {
-	return &AuthMiddleware{userService: us}
+func NewAuthMiddleware(a *auth.Authenticator, us *services.UserService) *AuthMiddleware {
+	return &AuthMiddleware{authenticator: a, userService: us}
 }
 
 func (m *AuthMiddleware) RequireWebAuth(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// check to see if they have a token in the request Auth header
+		next.ServeHTTP(w, r)
+	})
 }
 
-func (m *AuthMiddleware) RequireAPIAuth(next http.Handler) http.Handler {
+func (mw *AuthMiddleware) RequireAPIAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		googleClientID := os.Getenv("GOOGLE_CLIENT_ID")
-		if googleClientID == "" {
-			log.Fatal("GOOGLE_CLIENT_ID environment variable not set. Please set it to your Google OAuth client ID.")
-		}
-
-		authHeader := r.Header.Get("Authorization")
-		parts := strings.Split(authHeader, " ")
+		parts := strings.Split(r.Header.Get("Authorization"), " ")
 		if len(parts) != 2 || parts[0] != "Bearer" {
-			response.WriteJSONError(w, http.StatusUnauthorized, "Authorization header is malformed")
+			response.WriteJSONError(w, http.StatusUnauthorized, "'Authorization' header is missing or malformed")
 			return
 		}
 		token := parts[1]
 
+		jwt, err := mw.authenticator.ValidateJWT(token)
+		if err != nil {
+			response.WriteJSONError(w, http.StatusUnauthorized, err.Error())
+			return
+		}
+
+		userEmail, err := jwt.Claims.GetSubject()
+		if err != nil {
+			response.WriteJSONError(w, http.StatusUnauthorized, err.Error())
+			return
+		}
+
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 		defer cancel()
 
-		validator, err := idtoken.NewValidator(ctx)
+		user, err := mw.userService.GetUser(ctx, userEmail)
 		if err != nil {
-			log.Printf("Error creating idtoken validator: %v", err)
-			response.WriteJSONError(w, http.StatusInternalServerError, "Internal server error")
+			response.WriteJSONError(w, http.StatusForbidden, "")
 			return
 		}
 
-		payload, err := validator.Validate(ctx, token, googleClientID)
-		if err != nil {
-			log.Printf("ID token validation failed: %v", err)
-			response.WriteJSONError(w, http.StatusUnauthorized, "Invalid or expired token")
-			return
-		}
-
-		userEmail := payload.Claims["email"].(string)
-		_, err = m.userService.GetUser(ctx, userEmail)
-		if err != nil {
-			log.Printf("Unauthorized access attempt from: %s", userEmail)
-			response.WriteJSONError(w, http.StatusForbidden, "Access denied")
-			return
-		}
-
-		// Add the user's email to the request context for subsequent response.
-		ctx = context.WithValue(r.Context(), userEmailKey, userEmail)
+		ctx = context.WithValue(r.Context(), userEmailKey, user.Email)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
