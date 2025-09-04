@@ -17,6 +17,7 @@ type Config struct {
 	TmpDir          string
 	LogDir          string
 	GoogleClientID  string
+	JWTSecret       string
 }
 
 func Load() (*Config, error) {
@@ -34,6 +35,7 @@ func Load() (*Config, error) {
 		TmpDir:          os.Getenv("TMP_DIR"),
 		LogDir:          os.Getenv("LOG_DIR"),
 		GoogleClientID:  os.Getenv("GOOGLE_CLIENT_ID"),
+		JWTSecret:       os.Getenv("JWT_SECRET"),
 	}
 
 	if cfg.ServerPort == "" {
@@ -68,6 +70,10 @@ func Load() (*Config, error) {
 
 	if cfg.GoogleClientID == "" {
 		return nil, fmt.Errorf("GOOGLE_CLIENT_ID is required but was undefined")
+	}
+
+	if cfg.JWTSecret == "" {
+		return nil, fmt.Errorf("JWT_SECRET is required but was undefined")
 	}
 
 	return &cfg, nil

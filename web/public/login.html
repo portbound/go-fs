@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GoFS</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script
+      src="https://unpkg.com/alpinejs@3.10.3/dist/cdn.min.js"
+      defer
+    ></script>
+    <!-- Google Identity Services client library -->
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+  </head>
+  <body
+    class="bg-gray-900 text-white min-h-screen flex items-center justify-center font-sans p-4"
+  >
+    <!-- The main application container managed by Alpine.js -->
+    <div
+      x-data="app()"
+      @google-login-success.document="handleCredentialResponse($event.detail)"
+      class="bg-gray-800 p-8 rounded-xl shadow-lg w-full max-w-sm"
+    >
+      <!-- Google Sign-In Button -->
+      <h1 class="text-2xl font-bold mb-6 text-center">Login with Google</h1>
+      <div
+        id="g_id_onload"
+        data-client_id="803400577907-e0d9ffb6ifnp5cl8saeik0f5pjnqbqba.apps.googleusercontent.com"
+        data-context="signin"
+        data-ux_mode="popup"
+        data-callback="handleCredentialResponse"
+        data-auto_prompt="false"
+      ></div>
+      <div
+        class="g_id_signin"
+        data-type="standard"
+        data-shape="pill"
+        data-theme="outline"
+        data-text="signin_with"
+        data-size="large"
+        data-logo_alignment="left"
+      ></div>
+
+      <!-- Dynamic UI based on login state -->
+      <div
+        x-show="message"
+        class="mt-6 text-center p-4 rounded-lg"
+        :class="message.includes('success') ? 'bg-green-500/20 text-green-300' : 'bg-red-500/20 text-red-300'"
+      >
+        <span x-text="message" class="font-medium"></span>
+      </div>
+
+      <div x-show="userEmail" class="mt-6 text-center">
+        <p class="text-lg font-semibold">Welcome!</p>
+        <p class="text-sm text-gray-400" x-text="userEmail"></p>
+      </div>
+    </div>
+
+    <script>
+      function app() {
+        return {
+          message: "",
+          userEmail: "",
+
+          handleCredentialResponse(response) {
+            const idToken = response.credential;
+            this.sendTokenToBackend(idToken);
+          },
+
+          async sendTokenToBackend(idToken) {
+            this.message = "Verifying with the server...";
+            this.userEmail = "";
+
+            try {
+              const res = await fetch("http://localhost:8080/login", {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ token: idToken }),
+              });
+
+              const data = await res.json();
+
+              if (data.success) {
+                this.message = "Login successful!";
+                this.userEmail = data.email;
+                localStorage.setItem("jwt", data.token);
+                window.location.href = "/index.html";
+              } else {
+                console.log(data);
+                this.message = `Access Denied: ${data.message}`;
+                this.userEmail = "";
+              }
+            } catch (error) {
+              this.message =
+                "Error connecting to the server. Please check the console.";
+              console.error("Fetch error:", error);
+            }
+          },
+        };
+      }
+
+      window.handleCredentialResponse = function (response) {
+        document.dispatchEvent(
+          new CustomEvent("google-login-success", { detail: response }),
+        );
+      };
+    </script>
+  </body>
+</html>

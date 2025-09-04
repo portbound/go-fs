@@ -45,20 +45,25 @@ func main() {
 	userService := services.NewUserService(db)
 	fileService := services.NewFileService(storageRepo, fileMetaService, logger, cfg.TmpDir)
 
-	mux := http.NewServeMux()
-	webHandler := handlers.NewWebHandler()
-	webHandler.RegisterRoutes(mux)
+	webHandler := handlers.NewWebHandler(cfg.JWTSecret, userService)
 	apiHandler := handlers.NewAPIHandler(fileService, fileMetaService)
-	apiHandler.RegisterRoutes(mux)
+
+	mux := http.NewServeMux()
+	webHandler.RegisterRoutes(mux)
+
+	apiMux := http.NewServeMux()
+	apiHandler.RegisterRoutes(apiMux)
+
+	authMW := middleware.NewAuthMiddleware(userService)
+	mux.Handle("/", authMW.RequireWebAuth(http.FileServer(http.Dir("./web/public"))))
+	mux.Handle("/api", authMW.RequireAPIAuth(apiMux))
 
 	server := http.Server{
 		Addr:    cfg.ServerPort,
-		Handler: middleware.GoogleAuthMiddleware(cfg.GoogleClientID, userService, mux),
-		// Handler: middleware.Logging(mux),
+		Handler: mux,
 	}
 
 	log.Printf("starting server on port %s\n", cfg.ServerPort)
-
 	if err := server.ListenAndServe(); err != nil {
 		log.Fatalf("error: server failed to start: %v", err)
 	}
