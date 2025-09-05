@@ -10,6 +10,32 @@ document.addEventListener('alpine:init', () => {
     isUploading: false,
     filesToUpload: [],
 
+    // A reusable fetch wrapper to add the Authorization header.
+    async authedFetch(url, options = {}) {
+      const token = localStorage.getItem("jwt");
+      if (!token) {
+        // Redirect to login if no token is found
+        window.location.href = '/login.html';
+        return;
+      }
+
+      const headers = {
+        ...options.headers,
+        'Authorization': `Bearer ${token}`,
+      };
+
+      const response = await fetch(url, { ...options, headers });
+
+      if (response.status === 401) {
+        // Token is invalid or expired, redirect to login
+        localStorage.removeItem("jwt");
+        window.location.href = '/login.html';
+        throw new Error('Unauthorized');
+      }
+
+      return response;
+    },
+
     init() {
       this.fetchFiles();
     },
@@ -21,6 +47,9 @@ document.addEventListener('alpine:init', () => {
         if (!grouped[date]) {
           grouped[date] = [];
         }
+        // Add placeholder properties for our blob URLs
+        file.thumbnailUrl = '';
+        file.fullUrl = '';
         grouped[date].push(file);
       });
       return grouped;
@@ -36,26 +65,22 @@ document.addEventListener('alpine:init', () => {
       return date.toLocaleDateString(undefined, options);
     },
 
-    fetchThumbnail(thumbId) {
-      token = localStorage.getItem("jwt")
-      this.isLoading = true;
-      fetch(`/api/files/${id}`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      })
+    async loadThumbnail(file) {
+      if (file.thumbnailUrl) return; // Already loaded
+      try {
+        const response = await this.authedFetch(`/api/files/${file.thumbId}`);
+        if (!response.ok) throw new Error('Failed to fetch thumbnail');
+        const blob = await response.blob();
+        file.thumbnailUrl = URL.createObjectURL(blob);
+      } catch (error) {
+        console.error(`Error loading thumbnail for ${file.name}:`, error);
+        // You could set a default broken image URL here
+      }
     },
 
     fetchFiles() {
-      token = localStorage.getItem("jwt")
       this.isLoading = true;
-      fetch('/api/files', {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      })
+      this.authedFetch('/api/files')
         .then(response => {
           if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
@@ -65,6 +90,8 @@ document.addEventListener('alpine:init', () => {
         .then(data => {
           if (Array.isArray(data)) {
             this.files = this.groupFilesByDate(data);
+            // Asynchronously load thumbnails after files are grouped
+            Object.values(this.files).flat().forEach(file => this.loadThumbnail(file));
           } else {
             this.files = {};
             if (data) {
@@ -74,23 +101,62 @@ document.addEventListener('alpine:init', () => {
         })
         .catch(error => {
           console.error('Error fetching files:', error);
-          alert('Failed to fetch files. Check the console for more details.');
+          if (error.message !== 'Unauthorized') {
+            alert('Failed to fetch files. Check the console for more details.');
+          }
         })
         .finally(() => {
           this.isLoading = false;
         });
     },
 
-    handleFileClick(file) {
+    async handleFileClick(file) {
       this.selectedFile = file;
       this.showPopover = true;
+
+      // Load the full-resolution image/video if it hasn't been loaded yet
+      if (!this.selectedFile.fullUrl && (this.selectedFile.type?.startsWith('image/') || this.selectedFile.type?.startsWith('video/'))) {
+        try {
+          const response = await this.authedFetch(`/api/files/${this.selectedFile.id}`);
+          if (!response.ok) throw new Error('Failed to fetch full media');
+          const blob = await response.blob();
+          this.selectedFile.fullUrl = URL.createObjectURL(blob);
+        } catch (error) {
+          console.error(`Error loading full media for ${this.selectedFile.name}:`, error);
+          alert('Could not load media preview.');
+        }
+      }
     },
 
     openFullscreen() {
       if (this.selectedFile && this.selectedFile.type.startsWith('image/')) {
-        this.fullscreenImageUrl = `/api/files/${this.selectedFile.id}`;
+        this.fullscreenImageUrl = this.selectedFile.fullUrl;
         this.showFullscreenImage = true;
         this.showPopover = false;
+      }
+    },
+
+    async downloadFile(id) {
+      try {
+        const response = await this.authedFetch(`/api/files/${id}`, { method: 'GET' });
+        if (!response.ok) {
+          throw new Error(`Failed to download file: ${response.statusText}`);
+        }
+
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.style.display = 'none';
+        a.href = url;
+        // Use the selectedFile.name for the download attribute
+        a.download = this.selectedFile.name || `download_${id}`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+      } catch (error) {
+        console.error('Error downloading file:', error);
+        alert(error.message);
       }
     },
 
@@ -99,13 +165,7 @@ document.addEventListener('alpine:init', () => {
         return;
       }
 
-      token = localStorage.getItem("jwt")
-      fetch(`/api/files/${id}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        }
-      })
+      this.authedFetch(`/api/files/${id}`, { method: 'DELETE' })
         .then(response => {
           if (response.ok) {
             // Find and remove the file from the nested structure
@@ -135,23 +195,21 @@ document.addEventListener('alpine:init', () => {
       this.filesToUpload = Array.from(event.dataTransfer.files);
     },
 
+
+
     uploadFiles() {
       if (this.filesToUpload.length === 0) {
         return;
       }
 
       this.isUploading = true;
-      token = localStorage.getItem('jwt')
       const formData = new FormData();
       this.filesToUpload.forEach(file => {
         formData.append('file', file);
       });
 
-      fetch('/api/files', {
+      this.authedFetch('/api/files', {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        },
         body: formData,
       })
         .then(response => {

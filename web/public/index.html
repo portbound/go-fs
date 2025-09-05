@@ -66,7 +66,7 @@
                   class="relative aspect-square bg-gray-800 rounded-lg overflow-hidden cursor-pointer group hover:shadow-lg hover:shadow-indigo-500/20 transition-shadow duration-300"
                 >
                   <img
-                    :src="`/api/files/${file['thumbId']}`"
+                    :src="file.thumbnailUrl"
                     :alt="`Thumbnail for ${file.name}`"
                     class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
                   />
@@ -125,7 +125,7 @@
                   x-if="selectedFile.type && selectedFile.type.startsWith('image/')"
                 >
                   <img
-                    :src="`/api/files/${selectedFile.id}`"
+                    :src="selectedFile.fullUrl"
                     :alt="selectedFile.name"
                     class="rounded-lg max-w-full h-auto max-h-96 mx-auto"
                   />
@@ -135,7 +135,7 @@
                 >
                   <video
                     controls
-                    :src="`/api/files/${selectedFile.id}`"
+                    :src="selectedFile.fullUrl"
                     class="rounded-lg max-w-full h-auto max-h-96 mx-auto"
                   ></video>
                 </template>
@@ -175,12 +175,12 @@
                   </p>
                 </div>
                 <div class="mt-6 flex space-x-4">
-                  <a
-                    :href="`/api/files/${selectedFile.id}`"
-                    :download="selectedFile.name"
+                  <button
+                    @click="downloadFile(selectedFile.id)"
                     class="flex-1 text-center bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg transition-colors"
-                    >Download</a
                   >
+                    Download
+                  </button>
                   <button
                     @click="openFullscreen"
                     x-show="selectedFile.type && selectedFile.type.startsWith('image/')"
