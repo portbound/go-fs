@@ -5,10 +5,11 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"time"
 
-	"github.com/portbound/go-fs/pkg/response"
 	"github.com/portbound/go-fs/internal/services"
 	"github.com/portbound/go-fs/pkg/auth"
+	"github.com/portbound/go-fs/pkg/response"
 )
 
 type LoginRequest struct {
@@ -58,7 +59,7 @@ func (h *WebHandler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	requesterEmail, err := auth.ValidateOAuth(req.Token)
+	requesterEmail, err := h.authenticator.ValidateOAuth(req.Token)
 	if err != nil {
 		response.WriteJSONError(w, http.StatusUnauthorized, err.Error())
 		return
@@ -70,11 +71,15 @@ func (h *WebHandler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	jwt, err := h.authenticator.GenerateJWT(requesterEmail)
+	expirationDate := time.Now().UTC().AddDate(0, 30, 0)
+	jwt, err := h.authenticator.GenerateJWT(expirationDate, requesterEmail)
 	if err != nil {
 		response.WriteJSONError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to provision JWT for %s: %s", requesterEmail, err.Error()))
 		return
 	}
+
+	cookie := h.authenticator.GenerateCookie(expirationDate, jwt)
+	http.SetCookie(w, cookie)
 
 	response.WriteJSON(w, http.StatusOK, LoginResponse{JWT: jwt})
 }

@@ -42,20 +42,19 @@ func main() {
 	}
 	defer logFile.Close()
 
-	authenticator := auth.NewAuthenticator(cfg.JWTSecret)
 	fileMetaService := services.NewFileMetaService(db)
 	userService := services.NewUserService(db)
 	fileService := services.NewFileService(storageRepo, fileMetaService, logger, cfg.TmpDir)
 
+	authenticator := auth.NewAuthenticator(cfg.JWTSecret, cfg.GoogleClientID)
 	authMW := middleware.NewAuthMiddleware(authenticator, userService)
 
-	webHandler := handlers.NewWebHandler(authenticator, userService)
-	apiHandler := handlers.NewAPIHandler(fileService, fileMetaService)
-
 	mux := http.NewServeMux()
+	webHandler := handlers.NewWebHandler(authenticator, userService)
 	webHandler.RegisterRoutes(mux)
 
 	apiMux := http.NewServeMux()
+	apiHandler := handlers.NewAPIHandler(fileService, fileMetaService)
 	apiHandler.RegisterRoutes(apiMux)
 
 	mux.Handle("/", authMW.RequireWebAuth(http.FileServer(http.Dir("./web/public"))))
@@ -91,6 +90,7 @@ func setupStorage(storageProvider, bucket string) (repositories.StorageRepositor
 	}
 }
 
+// TODO: move to pkg/logger/logger.go
 func setupLogging(dir string) (*os.File, *log.Logger, error) {
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return nil, nil, fmt.Errorf("failed to create log directory '%s': %w", dir, err)
