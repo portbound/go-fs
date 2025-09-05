@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/portbound/go-fs/internal/auth"
-	"github.com/portbound/go-fs/internal/response"
 	"github.com/portbound/go-fs/internal/services"
+	"github.com/portbound/go-fs/pkg/auth"
+	"github.com/portbound/go-fs/pkg/response"
 )
 
 type contextKey string
@@ -24,9 +24,39 @@ func NewAuthMiddleware(a *auth.Authenticator, us *services.UserService) *AuthMid
 	return &AuthMiddleware{authenticator: a, userService: us}
 }
 
-func (m *AuthMiddleware) RequireWebAuth(next http.Handler) http.Handler {
+func (mw *AuthMiddleware) RequireWebAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// check to see if they have a token in the request Auth header
+		// parts := strings.Split(r.Header.Get("Authorization"), " ")
+		// if len(parts) != 2 || parts[0] != "Bearer" {
+		// 	http.Redirect(w, r, "/login", 303)
+		// 	return
+		// }
+		// token := parts[1]
+		//
+		// jwt, err := mw.authenticator.ValidateJWT(token)
+		// if err != nil {
+		// 	response.WriteJSONError(w, http.StatusUnauthorized, err.Error())
+		// 	return
+		// }
+		//
+		// userEmail, err := jwt.Claims.GetSubject()
+		// if err != nil {
+		// 	response.WriteJSONError(w, http.StatusUnauthorized, err.Error())
+		// 	return
+		// }
+		//
+		// ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+		// defer cancel()
+		//
+		// user, err := mw.userService.GetUser(ctx, userEmail)
+		// if err != nil {
+		// 	response.WriteJSONError(w, http.StatusForbidden, "")
+		// 	return
+		// }
+		//
+		// ctx = context.WithValue(r.Context(), userEmailKey, user.Email)
+		// next.ServeHTTP(w, r.WithContext(ctx))
+		//
 		next.ServeHTTP(w, r)
 	})
 }

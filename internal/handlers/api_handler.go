@@ -19,8 +19,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/portbound/go-fs/internal/models"
-	"github.com/portbound/go-fs/internal/response"
 	"github.com/portbound/go-fs/internal/services"
+	"github.com/portbound/go-fs/pkg/response"
 )
 
 type APIHandler struct {

@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/portbound/go-fs/internal/auth"
 	"github.com/portbound/go-fs/internal/config"
 	"github.com/portbound/go-fs/internal/handlers"
 	"github.com/portbound/go-fs/internal/infrastructure/database/sqlite"
@@ -17,16 +16,13 @@ import (
 	"github.com/portbound/go-fs/internal/middleware"
 	"github.com/portbound/go-fs/internal/repositories"
 	"github.com/portbound/go-fs/internal/services"
+	"github.com/portbound/go-fs/pkg/auth"
 )
 
 func main() {
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatalf("failed to load config: %v", err)
-	}
-
-	if err := os.MkdirAll(cfg.TmpDir, 0755); err != nil {
-		log.Fatalf("failed to create tmp directory '%s': %v", cfg.TmpDir, err)
 	}
 
 	db, err := setupDB(cfg.DBEngine, cfg.DBConnStr)
@@ -51,6 +47,8 @@ func main() {
 	userService := services.NewUserService(db)
 	fileService := services.NewFileService(storageRepo, fileMetaService, logger, cfg.TmpDir)
 
+	authMW := middleware.NewAuthMiddleware(authenticator, userService)
+
 	webHandler := handlers.NewWebHandler(authenticator, userService)
 	apiHandler := handlers.NewAPIHandler(fileService, fileMetaService)
 
@@ -60,7 +58,6 @@ func main() {
 	apiMux := http.NewServeMux()
 	apiHandler.RegisterRoutes(apiMux)
 
-	authMW := middleware.NewAuthMiddleware(authenticator, userService)
 	mux.Handle("/", authMW.RequireWebAuth(http.FileServer(http.Dir("./web/public"))))
 	mux.Handle("/api/", authMW.RequireAPIAuth(http.StripPrefix("/api", apiMux)))
 

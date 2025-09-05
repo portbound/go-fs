@@ -6,9 +6,9 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/portbound/go-fs/internal/auth"
-	"github.com/portbound/go-fs/internal/response"
+	"github.com/portbound/go-fs/pkg/response"
 	"github.com/portbound/go-fs/internal/services"
+	"github.com/portbound/go-fs/pkg/auth"
 )
 
 type LoginRequest struct {

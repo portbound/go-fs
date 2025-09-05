@@ -148,7 +148,6 @@ func (fs *FileService) StageFileToDisk(ctx context.Context, fileName string, rea
 	}
 
 	path := fs.tmpDir
-
 	if err := os.MkdirAll(path, 0755); err != nil {
 		return "", 0, fmt.Errorf("util.StageFileToDisk: failed to create storage dir at '%s': %w", path, err)
 	}
