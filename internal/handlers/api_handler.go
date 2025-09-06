@@ -43,6 +43,11 @@ func (h *APIHandler) RegisterRoutes(mux *http.ServeMux) {
 func (h *APIHandler) handleUploadFile(w http.ResponseWriter, r *http.Request) {
 	var errs []error
 	var batch []*models.FileMeta
+	user, ok := r.Context().Value(middleware.UserEmailKey).(string)
+	if !ok {
+		response.WriteJSONError(w, http.StatusBadRequest, "user unknown")
+		return
+	}
 
 	_, params, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
 	if err != nil {
@@ -64,7 +69,7 @@ func (h *APIHandler) handleUploadFile(w http.ResponseWriter, r *http.Request) {
 
 		if part.FileName() != "" {
 			id := uuid.New().String()
-			path, bytesWritten, err := h.fileService.StageFileToDisk(r.Context(), id, part)
+			path, _, err := h.fileService.StageFileToDisk(r.Context(), id, part)
 			if err != nil {
 				errs = append(errs, fmt.Errorf("handleUploadFile: StageFileToDisk() failed: %v - skipping: %s", err, part.FileName()))
 				continue
