@@ -7,33 +7,36 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"path/filepath"
 	"sync"
-	"time"
 
 	"github.com/portbound/go-fs/internal/models"
 	"github.com/portbound/go-fs/internal/repositories"
 )
 
-type FileService struct {
+type FileService interface {
+	ProcessBatch(ctx context.Context, batch []*models.FileMeta) []error
+	DownloadFile(ctx context.Context, id string) (io.ReadCloser, error)
+	DeleteFile(ctx context.Context, id string) error
+	StageFileToDisk(ctx context.Context, fileName string, reader io.Reader) (string, int64, error)
+}
+
+type fileService struct {
 	storage         repositories.StorageRepository
-	fileMetaService *FileMetaService
-	logger          *log.Logger
+	fileMetaService FileMetaService
 	tmpDir          string
 }
 
-func NewFileService(storageRepo repositories.StorageRepository, fileMetaService *FileMetaService, logger *log.Logger, tmpDir string) *FileService {
-	return &FileService{
+func NewFileService(storageRepo repositories.StorageRepository, fileMetaService FileMetaService, tmpDir string) FileService {
+	return &fileService{
 		storage:         storageRepo,
 		fileMetaService: fileMetaService,
-		logger:          logger,
 		tmpDir:          tmpDir,
 	}
 }
 
-func (fs *FileService) ProcessBatch(ctx context.Context, batch []*models.FileMeta) []error {
+func (fs *fileService) ProcessBatch(ctx context.Context, batch []*models.FileMeta) []error {
 	var wg sync.WaitGroup
 	var batchErrs []error
 
@@ -62,7 +65,7 @@ func (fs *FileService) ProcessBatch(ctx context.Context, batch []*models.FileMet
 			}
 
 			thumbID := fmt.Sprintf("thumb-%s", fm.ID)
-			path, bytesWritten, err := fs.StageFileToDisk(ctx, thumbID, thumbnailReader)
+			path, _, err := fs.StageFileToDisk(ctx, thumbID, thumbnailReader)
 			if err != nil {
 				ch <- fmt.Errorf("services.Processbatch: failed to stage thumbnail for %s to disk: %w", fm.Name, err)
 			}
@@ -75,8 +78,8 @@ func (fs *FileService) ProcessBatch(ctx context.Context, batch []*models.FileMet
 				ThumbID:     "",
 				Name:        fmt.Sprintf("thumb-%s", fm.Name),
 				ContentType: "image/jpeg",
-				Size:        bytesWritten,
-				UploadDate:  time.Now(),
+				// Size:        bytesWritten,
+				// UploadDate:  time.Now(),
 				Owner:       fm.Owner,
 				TmpFilePath: path,
 			}
@@ -86,7 +89,9 @@ func (fs *FileService) ProcessBatch(ctx context.Context, batch []*models.FileMet
 				return
 			}
 
-			fs.logger.Printf("Thumbnail Upload Success: File '%s'", fm.Name)
+			// TODO setup logger
+			// msg := fmt.Sprintf("Thumbnail Upload Success: File '%s'", fm.Name)
+			// fs.logger.Write(msg)
 
 			fileReader, err := os.Open(fm.TmpFilePath)
 			if err != nil {
@@ -98,7 +103,9 @@ func (fs *FileService) ProcessBatch(ctx context.Context, batch []*models.FileMet
 			if err := fs.processFile(ctx, fm); err != nil {
 				if fm.ThumbID != "" {
 					if err = fs.DeleteFile(ctx, fm.ThumbID); err != nil {
-						fs.logger.Printf("CRITICAL - Delete File: Failed to delete orphaned thumbnail '%s'", fm.ThumbID)
+						// TODO setup logger
+						// msg := fmt.Sprintf("CRITICAL - Delete File: Failed to delete orphaned thumbnail '%s'", fm.ThumbID)
+						// fs.logger.Write(msg)
 						ch <- fmt.Errorf("CRITICAL - services.ProcessBatch: failed to delete orphaned thumbnail %s: %v", fm.ThumbID, err)
 					}
 				}
@@ -106,7 +113,9 @@ func (fs *FileService) ProcessBatch(ctx context.Context, batch []*models.FileMet
 				return
 			}
 
-			fs.logger.Printf("File Upload Success: File '%s'", fm.Name)
+			// TODO setup logger
+			// msg = fmt.Sprintf("File Upload Success: File '%s'", fm.Name)
+			// fs.logger.Write(msg)
 			ch <- nil
 		}()
 	}
@@ -125,7 +134,7 @@ func (fs *FileService) ProcessBatch(ctx context.Context, batch []*models.FileMet
 	return batchErrs
 }
 
-func (fs *FileService) DownloadFile(ctx context.Context, id string) (io.ReadCloser, error) {
+func (fs *fileService) DownloadFile(ctx context.Context, id string) (io.ReadCloser, error) {
 	gcsReader, err := fs.storage.Download(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("services.GetFile: failed to get file from storage: %w", err)
@@ -134,14 +143,14 @@ func (fs *FileService) DownloadFile(ctx context.Context, id string) (io.ReadClos
 	return gcsReader, nil
 }
 
-func (fs *FileService) DeleteFile(ctx context.Context, id string) error {
+func (fs *fileService) DeleteFile(ctx context.Context, id string) error {
 	if err := fs.storage.Delete(ctx, id); err != nil {
 		return fmt.Errorf("services.DeleteFile: failed to delete %s from storage: %w", id, err)
 	}
 	return nil
 }
 
-func (fs *FileService) StageFileToDisk(ctx context.Context, fileName string, reader io.Reader) (string, int64, error) {
+func (fs *fileService) StageFileToDisk(ctx context.Context, fileName string, reader io.Reader) (string, int64, error) {
 	type chanl struct {
 		bytesWritten int64
 		err          error
@@ -177,7 +186,7 @@ func (fs *FileService) StageFileToDisk(ctx context.Context, fileName string, rea
 	}
 }
 
-func (fs *FileService) processFile(ctx context.Context, fm *models.FileMeta) error {
+func (fs *fileService) processFile(ctx context.Context, fm *models.FileMeta) error {
 	var err error
 	fm.Size, fm.UploadDate, err = fs.storage.Upload(ctx, fm.ID, fm.TmpFilePath)
 	if err != nil {
@@ -186,7 +195,9 @@ func (fs *FileService) processFile(ctx context.Context, fm *models.FileMeta) err
 
 	if err := fs.fileMetaService.SaveFileMeta(ctx, fm); err != nil {
 		if rbErr := fs.DeleteFile(ctx, fm.ID); rbErr != nil {
-			fs.logger.Printf("CRITICAL: failed to delete orphaned file %s from storage: %v", fm.Name, rbErr)
+			// TODO setup logger
+			// msg := fmt.Sprintf("CRITICAL: failed to delete orphaned file %s from storage: %v", fm.Name, rbErr)
+			// fs.logger.Write(msg)
 		}
 		return fmt.Errorf("save metadata failed for %s: %w", fm.Name, err)
 	}

@@ -21,11 +21,11 @@ type LoginResponse struct {
 }
 
 type WebHandler struct {
-	userService   *services.UserService
+	userService   services.UserService
 	authenticator *auth.Authenticator
 }
 
-func NewWebHandler(a *auth.Authenticator, us *services.UserService) *WebHandler {
+func NewWebHandler(a *auth.Authenticator, us services.UserService) *WebHandler {
 	return &WebHandler{authenticator: a, userService: us}
 }
 
@@ -65,7 +65,7 @@ func (h *WebHandler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err = h.userService.GetUser(r.Context(), requesterEmail)
+	_, err = h.userService.LookupUser(r.Context(), requesterEmail)
 	if err != nil {
 		response.WriteJSONError(w, http.StatusForbidden, fmt.Sprintf("Access denied for %s", requesterEmail))
 		return

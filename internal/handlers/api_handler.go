@@ -24,11 +24,11 @@ import (
 )
 
 type APIHandler struct {
-	fileService     *services.FileService
-	fileMetaService *services.FileMetaService
+	fileService     services.FileService
+	fileMetaService services.FileMetaService
 }
 
-func NewAPIHandler(fs *services.FileService, fms *services.FileMetaService) *APIHandler {
+func NewAPIHandler(fs services.FileService, fms services.FileMetaService) *APIHandler {
 	return &APIHandler{fileService: fs, fileMetaService: fms}
 }
 

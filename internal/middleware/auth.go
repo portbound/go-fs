@@ -18,10 +18,10 @@ const userEmailKey contextKey = "userEmail"
 
 type AuthMiddleware struct {
 	authenticator *auth.Authenticator
-	userService   *services.UserService
+	userService   services.UserService
 }
 
-func NewAuthMiddleware(a *auth.Authenticator, us *services.UserService) *AuthMiddleware {
+func NewAuthMiddleware(a *auth.Authenticator, us services.UserService) *AuthMiddleware {
 	return &AuthMiddleware{authenticator: a, userService: us}
 }
 
@@ -52,7 +52,7 @@ func (mw *AuthMiddleware) RequireWebAuth(next http.Handler) http.Handler {
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 		defer cancel()
 
-		user, err := mw.userService.GetUser(ctx, userEmail)
+		user, err := mw.userService.LookupUser(ctx, userEmail)
 		if err != nil {
 			response.WriteJSONError(w, http.StatusForbidden, "")
 			return
@@ -87,7 +87,7 @@ func (mw *AuthMiddleware) RequireAPIAuth(next http.Handler) http.Handler {
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 		defer cancel()
 
-		user, err := mw.userService.GetUser(ctx, userEmail)
+		user, err := mw.userService.LookupUser(ctx, userEmail)
 		if err != nil {
 			response.WriteJSONError(w, http.StatusForbidden, "")
 			return
