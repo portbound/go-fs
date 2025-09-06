@@ -36,15 +36,9 @@ func main() {
 		log.Fatalf("main.setupStorage failed: %v", err)
 	}
 
-	logFile, logger, err := setupLogging(cfg.LogDir)
-	if err != nil {
-		log.Fatalf("main.setupLogging failed: %v", err)
-	}
-	defer logFile.Close()
-
 	fileMetaService := services.NewFileMetaService(db)
+	fileService := services.NewFileService(storage, fileMetaService, cfg.TmpDir)
 	userService := services.NewUserService(db)
-	fileService := services.NewFileService(storageRepo, fileMetaService, logger, cfg.TmpDir)
 
 	authenticator := auth.NewAuthenticator(cfg.JWTSecret, cfg.GoogleClientID)
 	authMW := middleware.NewAuthMiddleware(authenticator, userService)
@@ -88,22 +82,4 @@ func setupStorage(storageProvider, bucket string) (repositories.StorageRepositor
 	default:
 		return nil, fmt.Errorf("unsupported cloud provider: %s", storageProvider)
 	}
-}
-
-// TODO: move to pkg/logger/logger.go
-func setupLogging(dir string) (*os.File, *log.Logger, error) {
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return nil, nil, fmt.Errorf("failed to create log directory '%s': %w", dir, err)
-	}
-
-	logName := fmt.Sprintf("%s.log", time.Now().Format("2006-01-02"))
-	logFilePath := filepath.Join(dir, logName)
-
-	logFile, err := os.OpenFile(logFilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to open log file '%s': %w", logFilePath, err)
-	}
-
-	logger := log.New(logFile, "", log.Ldate|log.Ltime|log.Lshortfile)
-	return logFile, logger, nil
 }
