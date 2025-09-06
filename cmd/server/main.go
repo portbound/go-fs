@@ -5,9 +5,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"os"
-	"path/filepath"
-	"time"
 
 	"github.com/portbound/go-fs/internal/config"
 	"github.com/portbound/go-fs/internal/handlers"
@@ -31,7 +28,7 @@ func main() {
 	}
 	defer db.Conn.Close()
 
-	storageRepo, err := setupStorage(cfg.StorageProvider, cfg.BucketName)
+	storage, err := setupStorage(cfg.StorageProvider, cfg.BucketName)
 	if err != nil {
 		log.Fatalf("main.setupStorage failed: %v", err)
 	}
@@ -74,7 +71,7 @@ func setupDB(driverName string, connStr string) (*sqlite.SQLiteDB, error) {
 	}
 }
 
-func setupStorage(storageProvider, bucket string) (repositories.StorageRepository, error) {
+func setupStorage(storageProvider string, bucket string) (repositories.StorageRepository, error) {
 	switch storageProvider {
 	case "gcs":
 		ctx := context.Background()

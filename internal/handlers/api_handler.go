@@ -15,9 +15,9 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
-	"time"
 
 	"github.com/google/uuid"
+	"github.com/portbound/go-fs/internal/middleware"
 	"github.com/portbound/go-fs/internal/models"
 	"github.com/portbound/go-fs/internal/services"
 	"github.com/portbound/go-fs/pkg/response"
@@ -68,6 +68,8 @@ func (h *APIHandler) handleUploadFile(w http.ResponseWriter, r *http.Request) {
 		defer part.Close()
 
 		if part.FileName() != "" {
+			// TODO bail if it's not img or video
+			// if part.Header.Get("Content-Type")
 			id := uuid.New().String()
 			path, _, err := h.fileService.StageFileToDisk(r.Context(), id, part)
 			if err != nil {
@@ -80,9 +82,10 @@ func (h *APIHandler) handleUploadFile(w http.ResponseWriter, r *http.Request) {
 				ID:          id,
 				Name:        filepath.Base(part.FileName()),
 				ContentType: part.Header.Get("Content-Type"),
-				Size:        bytesWritten,
-				UploadDate:  time.Now(),
-				Owner:       "me",
+				// Size:        bytesWritten,
+				// UploadDate:  time.Now(),
+				// Owner:       "me",
+				Owner:       user,
 				TmpFilePath: path,
 			})
 		}
