@@ -11,7 +11,7 @@ import (
 type Querier interface {
 	CreateFileMeta(ctx context.Context, arg CreateFileMetaParams) error
 	DeleteFileMeta(ctx context.Context, id string) error
-	GetAllFileMeta(ctx context.Context) ([]FileMetum, error)
+	GetAllFileMeta(ctx context.Context, owner string) ([]FileMetum, error)
 	GetFileMeta(ctx context.Context, id string) (FileMetum, error)
 	GetUser(ctx context.Context, email string) (User, error)
 }

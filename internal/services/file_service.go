@@ -16,9 +16,9 @@ import (
 )
 
 type FileService interface {
-	ProcessBatch(ctx context.Context, batch []*models.FileMeta) []error
-	DownloadFile(ctx context.Context, id string, owner string) (io.ReadCloser, error)
-	DeleteFile(ctx context.Context, id string, owner string) error
+	ProcessBatch(ctx context.Context, batch []*models.FileMeta, user *models.User) []error
+	DownloadFile(ctx context.Context, id string, owner *models.User) (io.ReadCloser, error)
+	DeleteFile(ctx context.Context, id string, owner *models.User) error
 	StageFileToDisk(ctx context.Context, fileName string, reader io.Reader) (string, int64, error)
 }
 
@@ -36,7 +36,7 @@ func NewFileService(storageRepo repositories.StorageRepository, fileMetaService 
 	}
 }
 
-func (fs *fileService) ProcessBatch(ctx context.Context, batch []*models.FileMeta) []error {
+func (fs *fileService) ProcessBatch(ctx context.Context, batch []*models.FileMeta, user *models.User) []error {
 	var wg sync.WaitGroup
 	var batchErrs []error
 
@@ -82,7 +82,7 @@ func (fs *fileService) ProcessBatch(ctx context.Context, batch []*models.FileMet
 				TmpFilePath: path,
 			}
 
-			if err = fs.processFile(ctx, thumbFm); err != nil {
+			if err = fs.processFile(ctx, thumbFm, user); err != nil {
 				ch <- fmt.Errorf("[services.ProcessBatch] failed to process thumbnail for %s: %w", fm.Name, err)
 				return
 			}
@@ -98,9 +98,9 @@ func (fs *fileService) ProcessBatch(ctx context.Context, batch []*models.FileMet
 			}
 			defer fileReader.Close()
 
-			if err := fs.processFile(ctx, fm); err != nil {
+			if err := fs.processFile(ctx, fm, user); err != nil {
 				if fm.ThumbID != "" {
-					if err = fs.DeleteFile(ctx, fm.ThumbID, fm.Owner); err != nil {
+					if err = fs.DeleteFile(ctx, fm.ThumbID, user); err != nil {
 						// TODO setup logger
 						// msg := fmt.Sprintf("CRITICAL - Delete File: Failed to delete orphaned thumbnail '%s'", fm.ThumbID)
 						// fs.logger.Write(msg)
@@ -132,8 +132,8 @@ func (fs *fileService) ProcessBatch(ctx context.Context, batch []*models.FileMet
 	return batchErrs
 }
 
-func (fs *fileService) DownloadFile(ctx context.Context, id string, owner string) (io.ReadCloser, error) {
-	gcsReader, err := fs.storage.Download(ctx, id, owner)
+func (fs *fileService) DownloadFile(ctx context.Context, id string, owner *models.User) (io.ReadCloser, error) {
+	gcsReader, err := fs.storage.Download(ctx, id, owner.BucketName)
 	if err != nil {
 		return nil, fmt.Errorf("[services.GetFile] failed to get file from storage: %w", err)
 	}
@@ -141,8 +141,8 @@ func (fs *fileService) DownloadFile(ctx context.Context, id string, owner string
 	return gcsReader, nil
 }
 
-func (fs *fileService) DeleteFile(ctx context.Context, id string, owner string) error {
-	if err := fs.storage.Delete(ctx, id, owner); err != nil {
+func (fs *fileService) DeleteFile(ctx context.Context, id string, owner *models.User) error {
+	if err := fs.storage.Delete(ctx, id, owner.BucketName); err != nil {
 		return fmt.Errorf("[services.DeleteFile] failed to delete %s from storage: %w", id, err)
 	}
 	return nil
@@ -184,15 +184,15 @@ func (fs *fileService) StageFileToDisk(ctx context.Context, fileName string, rea
 	}
 }
 
-func (fs *fileService) processFile(ctx context.Context, fm *models.FileMeta) error {
+func (fs *fileService) processFile(ctx context.Context, fm *models.FileMeta, user *models.User) error {
 	var err error
-	fm.Size, fm.UploadDate, err = fs.storage.Upload(ctx, fm.ID, fm.Owner, fm.TmpFilePath)
+	fm.Size, fm.UploadDate, err = fs.storage.Upload(ctx, fm.ID, user.BucketName, fm.TmpFilePath)
 	if err != nil {
 		return fmt.Errorf("[fileService.processFile] upload failed for %s: %w", fm.Name, err)
 	}
 
 	if err := fs.fileMetaService.SaveFileMeta(ctx, fm); err != nil {
-		if rbErr := fs.DeleteFile(ctx, fm.ID, fm.Owner); rbErr != nil {
+		if rbErr := fs.DeleteFile(ctx, fm.ID, user); rbErr != nil {
 			// TODO setup logger
 			// msg := fmt.Sprintf("CRITICAL: failed to delete orphaned file %s from storage: %v", fm.Name, rbErr)
 			// fs.logger.Write(msg)

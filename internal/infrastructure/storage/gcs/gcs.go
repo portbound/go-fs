@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strings"
 	"time"
 
 	"cloud.google.com/go/storage"
@@ -26,22 +25,23 @@ func NewStorage(ctx context.Context, projectID string) (*Storage, error) {
 	return &Storage{client: client, projectID: projectID}, nil
 }
 
-func (s *Storage) Upload(ctx context.Context, fileName string, owner string, diskPath string) (int64, time.Time, error) {
+func (s *Storage) Upload(ctx context.Context, fileName string, bucketName string, diskPath string) (int64, time.Time, error) {
 	src, err := os.Open(diskPath)
 	if err != nil {
 		return 0, time.Time{}, fmt.Errorf("[gcs.Upload] failed to open file %s: %w", diskPath, err)
 	}
 	defer src.Close()
 
-	bucketName := strings.Split(owner, "@")[0]
 	bkt := s.client.Bucket(bucketName)
 	_, err = bkt.Attrs(ctx)
-	if errors.Is(storage.ErrBucketNotExist, err) {
+	if err != nil {
+		if !errors.Is(err, storage.ErrBucketNotExist) {
+			return 0, time.Time{}, fmt.Errorf("[gcs.Upload] failed to verify bucket attributes for %s: %w", bucketName, err)
+		}
+
 		if err := bkt.Create(ctx, s.projectID, nil); err != nil {
 			return 0, time.Time{}, fmt.Errorf("[gcs.Upload] failed to create new bucket %s: %w", bucketName, err)
 		}
-	} else {
-		return 0, time.Time{}, fmt.Errorf("[gcs.Upload] failed to verify bucket attributes for %s: %w", bucketName, err)
 	}
 
 	obj := s.client.Bucket(bucketName).Object(fileName)
@@ -66,8 +66,7 @@ func (s *Storage) Upload(ctx context.Context, fileName string, owner string, dis
 	return attrs.Size, attrs.Created, nil
 }
 
-func (s *Storage) Download(ctx context.Context, fileName string, owner string) (io.ReadCloser, error) {
-	bucketName := strings.Split(owner, "@")[0]
+func (s *Storage) Download(ctx context.Context, fileName string, bucketName string) (io.ReadCloser, error) {
 	obj := s.client.Bucket(bucketName).Object(fileName)
 
 	r, err := obj.NewReader(ctx)
@@ -77,8 +76,7 @@ func (s *Storage) Download(ctx context.Context, fileName string, owner string) (
 	return r, nil
 }
 
-func (s *Storage) Delete(ctx context.Context, id string, owner string) error {
-	bucketName := strings.Split(owner, "@")[0]
+func (s *Storage) Delete(ctx context.Context, id string, bucketName string) error {
 	obj := s.client.Bucket(bucketName).Object(id)
 
 	if err := obj.Delete(ctx); err != nil {

@@ -11,7 +11,7 @@ import (
 type FileMetaService interface {
 	SaveFileMeta(ctx context.Context, fm *models.FileMeta) error
 	LookupFileMeta(ctx context.Context, id string) (*models.FileMeta, error)
-	LookupAllFileMeta(ctx context.Context) ([]*models.FileMeta, error)
+	LookupAllFileMeta(ctx context.Context, owner *models.User) ([]*models.FileMeta, error)
 	DeleteFileMeta(ctx context.Context, id string) error
 }
 
@@ -38,8 +38,8 @@ func (fms *fileMetaService) LookupFileMeta(ctx context.Context, id string) (*mod
 	return fm, nil
 }
 
-func (fms *fileMetaService) LookupAllFileMeta(ctx context.Context) ([]*models.FileMeta, error) {
-	data, err := fms.db.GetAllFileMeta(ctx)
+func (fms *fileMetaService) LookupAllFileMeta(ctx context.Context, owner *models.User) ([]*models.FileMeta, error) {
+	data, err := fms.db.GetAllFileMeta(ctx, owner)
 	if err != nil {
 		return nil, fmt.Errorf("[services.GetFileIDs] failed to get file ids from DB: %w", err)
 	}

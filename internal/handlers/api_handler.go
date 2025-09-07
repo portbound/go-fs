@@ -27,10 +27,11 @@ import (
 type APIHandler struct {
 	fs  services.FileService
 	fms services.FileMetaService
+	us  services.UserService
 }
 
-func NewAPIHandler(fs services.FileService, fms services.FileMetaService) *APIHandler {
-	return &APIHandler{fs: fs, fms: fms}
+func NewAPIHandler(fs services.FileService, fms services.FileMetaService, us services.UserService) *APIHandler {
+	return &APIHandler{fs: fs, fms: fms, us: us}
 }
 
 func (h *APIHandler) RegisterRoutes(mux *http.ServeMux) {
@@ -45,9 +46,8 @@ func (h *APIHandler) handleUploadFile(w http.ResponseWriter, r *http.Request) {
 	var errs []error
 	var batch []*models.FileMeta
 
-	requesterEmail, ok := r.Context().Value(middleware.RequesterEmailKey).(string)
+	user, ok := h.getUserFromContext(w, r.Context())
 	if !ok {
-		response.WriteJSONError(w, http.StatusBadRequest, fmt.Sprintf("Requester: %s not known", requesterEmail))
 		return
 	}
 
@@ -88,13 +88,13 @@ func (h *APIHandler) handleUploadFile(w http.ResponseWriter, r *http.Request) {
 				ID:          id,
 				Name:        filepath.Base(part.FileName()),
 				ContentType: contentType,
-				Owner:       requesterEmail,
+				Owner:       user.Email,
 				TmpFilePath: path,
 			})
 		}
 	}
 
-	batchErrs := h.fs.ProcessBatch(r.Context(), batch)
+	batchErrs := h.fs.ProcessBatch(r.Context(), batch, user)
 	if batchErrs != nil {
 		errs = append(errs, batchErrs...)
 	}
@@ -116,9 +116,8 @@ func (h *APIHandler) handleUploadFile(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *APIHandler) handleDownloadFile(w http.ResponseWriter, r *http.Request) {
-	requesterEmail, ok := r.Context().Value(middleware.RequesterEmailKey).(string)
+	user, ok := h.getUserFromContext(w, r.Context())
 	if !ok {
-		response.WriteJSONError(w, http.StatusBadRequest, fmt.Sprintf("Requester: %s not known", requesterEmail))
 		return
 	}
 
@@ -135,12 +134,12 @@ func (h *APIHandler) handleDownloadFile(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	if requesterEmail != fm.Owner {
-		response.WriteJSONError(w, http.StatusForbidden, fmt.Sprintf("Access denied for %s", requesterEmail))
+	if user.Email != fm.Owner {
+		response.WriteJSONError(w, http.StatusForbidden, fmt.Sprintf("Reqested action denied for %s", user.Email))
 		return
 	}
 
-	gcsReader, err := h.fs.DownloadFile(r.Context(), fm.ID, fm.Owner)
+	gcsReader, err := h.fs.DownloadFile(r.Context(), fm.ID, user)
 	if err != nil {
 		response.WriteJSONError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -154,29 +153,57 @@ func (h *APIHandler) handleDownloadFile(w http.ResponseWriter, r *http.Request) 
 		response.WriteJSONError(w, http.StatusInternalServerError, fmt.Sprintf("failed to stream file to client: %v", err))
 		return
 	}
-	response.WriteJSON(w, http.StatusOK, nil)
 }
 
 func (h *APIHandler) handleGetFileMeta(w http.ResponseWriter, r *http.Request) {
-	afm, err := h.fms.LookupAllFileMeta(r.Context())
+	user, ok := h.getUserFromContext(w, r.Context())
+	if !ok {
+		return
+	}
+
+	dbCtx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+
+	afm, err := h.fms.LookupAllFileMeta(dbCtx, user)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return
+		}
 		response.WriteJSONError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+
 	response.WriteJSON(w, http.StatusOK, afm)
 }
 
 func (h *APIHandler) handleDeleteFile(w http.ResponseWriter, r *http.Request) {
-	var errs []error
+	user, ok := h.getUserFromContext(w, r.Context())
+	if !ok {
+		return
+	}
 
-	fm, err := h.fms.LookupFileMeta(r.Context(), r.PathValue("id"))
+	dbCtx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+
+	id := r.PathValue("id")
+	fm, err := h.fms.LookupFileMeta(dbCtx, id)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			response.WriteJSONError(w, http.StatusNotFound, fmt.Sprintf("[handleDeleteFile] file not found for id: %s", id))
+			return
+		}
 		response.WriteJSONError(w, http.StatusNotFound, err.Error())
 		return
 	}
 
+	if user.Email != fm.Owner {
+		response.WriteJSONError(w, http.StatusForbidden, fmt.Sprintf("Reqested action denied for %s", user.Email))
+		return
+	}
+
+	var errs []error
 	if fm.ThumbID != "" {
-		if err := h.fs.DeleteFile(r.Context(), fm.ThumbID, fm.Owner); err != nil {
+		if err := h.fs.DeleteFile(r.Context(), fm.ThumbID, user); err != nil {
 			errs = append(errs, fmt.Errorf("[services.DeleteFile] failed to delete thumbnail for %s: %v", fm.ID, err))
 		}
 		if err := h.fms.DeleteFileMeta(r.Context(), fm.ThumbID); err != nil {
@@ -184,7 +211,7 @@ func (h *APIHandler) handleDeleteFile(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if err := h.fs.DeleteFile(r.Context(), fm.ID, fm.Owner); err != nil {
+	if err := h.fs.DeleteFile(r.Context(), fm.ID, user); err != nil {
 		errs = append(errs, fmt.Errorf("[services.DeleteFile] failed to delete file %s: %v", fm.ID, err))
 	}
 	if err := h.fms.DeleteFileMeta(r.Context(), fm.ID); err != nil {
@@ -203,6 +230,11 @@ func (h *APIHandler) handleDeleteFile(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *APIHandler) handleDeleteBatch(w http.ResponseWriter, r *http.Request) {
+	user, ok := h.getUserFromContext(w, r.Context())
+	if !ok {
+		return
+	}
+
 	var ids []string
 	if err := json.NewDecoder(r.Body).Decode(&ids); err != nil {
 		response.WriteJSONError(w, http.StatusBadRequest, err.Error())
@@ -222,7 +254,7 @@ func (h *APIHandler) handleDeleteBatch(w http.ResponseWriter, r *http.Request) {
 			}
 
 			if fm.ThumbID != "" {
-				if err := h.fs.DeleteFile(ctx, fm.ThumbID, fm.Owner); err != nil {
+				if err := h.fs.DeleteFile(ctx, fm.ThumbID, user); err != nil {
 					ch <- fmt.Errorf("[services.DeleteFile] failed to delete thumbnail for %s: %v", fm.ID, err)
 				}
 				if err := h.fms.DeleteFileMeta(ctx, fm.ThumbID); err != nil {
@@ -230,7 +262,7 @@ func (h *APIHandler) handleDeleteBatch(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 
-			if err := h.fs.DeleteFile(ctx, fm.ID, fm.Owner); err != nil {
+			if err := h.fs.DeleteFile(ctx, fm.ID, user); err != nil {
 				ch <- fmt.Errorf("[services.DeleteFile] failed to delete file %s: %v", fm.ID, err)
 			}
 			if err := h.fms.DeleteFileMeta(ctx, fm.ID); err != nil {
@@ -251,4 +283,27 @@ func (h *APIHandler) handleDeleteBatch(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 	response.WriteJSON(w, http.StatusNoContent, nil)
+}
+
+func (h *APIHandler) getUserFromContext(w http.ResponseWriter, ctx context.Context) (*models.User, bool) {
+	requester, ok := ctx.Value(middleware.RequesterEmailKey).(string)
+	if !ok {
+		response.WriteJSONError(w, http.StatusUnauthorized, "[getUserFromContext] access denied: no requester in context")
+		return nil, false
+	}
+
+	dbCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	user, err := h.us.LookupUser(dbCtx, requester)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			response.WriteJSONError(w, http.StatusNotFound, fmt.Sprintf("[getUserFromContext] user not found: %s", requester))
+			return nil, false
+		}
+		response.WriteJSONError(w, http.StatusInternalServerError, fmt.Sprintf("[getUserFromContext] failed to lookup user: %v", err))
+		return nil, false
+	}
+
+	return user, true
 }

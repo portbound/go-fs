@@ -27,7 +27,7 @@ func NewAuthMiddleware(a *auth.Authenticator, us services.UserService) *AuthMidd
 
 func (mw *AuthMiddleware) RequireWebAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		cookie, err := r.Cookie("go-fs")
+		cookie, err := r.Cookie("gofs_session")
 		if err != nil {
 			if errors.Is(http.ErrNoCookie, err) {
 				http.Redirect(w, r, "/login", 303)

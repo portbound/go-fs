@@ -34,8 +34,8 @@ func main() {
 	}
 
 	fileMetaService := services.NewFileMetaService(db)
-	fileService := services.NewFileService(storage, fileMetaService, cfg.TmpDir)
 	userService := services.NewUserService(db)
+	fileService := services.NewFileService(storage, fileMetaService, cfg.TmpDir)
 
 	authenticator := auth.NewAuthenticator(cfg.JWTSecret, cfg.GoogleClientID)
 	authMW := middleware.NewAuthMiddleware(authenticator, userService)
@@ -45,7 +45,7 @@ func main() {
 	webHandler.RegisterRoutes(mux)
 
 	apiMux := http.NewServeMux()
-	apiHandler := handlers.NewAPIHandler(fileService, fileMetaService)
+	apiHandler := handlers.NewAPIHandler(fileService, fileMetaService, userService)
 	apiHandler.RegisterRoutes(apiMux)
 
 	mux.Handle("/", authMW.RequireWebAuth(http.FileServer(http.Dir("./web/public"))))

@@ -55,11 +55,12 @@ func (q *Queries) DeleteFileMeta(ctx context.Context, id string) error {
 
 const getAllFileMeta = `-- name: GetAllFileMeta :many
 SELECT id, parent_id, thumb_id, name, content_type, size, upload_date, owner FROM file_meta
+WHERE owner = ?
 ORDER BY upload_date
 `
 
-func (q *Queries) GetAllFileMeta(ctx context.Context) ([]FileMetum, error) {
-	rows, err := q.query(ctx, q.getAllFileMetaStmt, getAllFileMeta)
+func (q *Queries) GetAllFileMeta(ctx context.Context, owner string) ([]FileMetum, error) {
+	rows, err := q.query(ctx, q.getAllFileMetaStmt, getAllFileMeta, owner)
 	if err != nil {
 		return nil, err
 	}
@@ -112,18 +113,13 @@ func (q *Queries) GetFileMeta(ctx context.Context, id string) (FileMetum, error)
 }
 
 const getUser = `-- name: GetUser :one
-SELECT id, email, token, bucket_name FROM users 
+SELECT id, email, bucket_name FROM users 
 WHERE email = ? LIMIT 1
 `
 
 func (q *Queries) GetUser(ctx context.Context, email string) (User, error) {
 	row := q.queryRow(ctx, q.getUserStmt, getUser, email)
 	var i User
-	err := row.Scan(
-		&i.ID,
-		&i.Email,
-		&i.Token,
-		&i.BucketName,
-	)
+	err := row.Scan(&i.ID, &i.Email, &i.BucketName)
 	return i, err
 }

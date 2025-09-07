@@ -31,8 +31,8 @@ func (db *SQLiteDB) GetFileMeta(ctx context.Context, id string) (*models.FileMet
 	return mapFileMeta(file)
 }
 
-func (db *SQLiteDB) GetAllFileMeta(ctx context.Context) ([]*models.FileMeta, error) {
-	data, err := db.Queries.GetAllFileMeta(ctx)
+func (db *SQLiteDB) GetAllFileMeta(ctx context.Context, owner *models.User) ([]*models.FileMeta, error) {
+	data, err := db.Queries.GetAllFileMeta(ctx, owner.Email)
 	if err != nil {
 		return nil, err
 	}

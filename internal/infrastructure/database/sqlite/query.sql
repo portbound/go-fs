@@ -15,6 +15,7 @@ WHERE id = ? LIMIT 1;
 
 -- name: GetAllFileMeta :many
 SELECT * FROM file_meta
+WHERE owner = ?
 ORDER BY upload_date;
 
 -- name: DeleteFileMeta :exec

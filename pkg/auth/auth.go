@@ -46,7 +46,7 @@ func (a *Authenticator) ValidateJWT(tokenString string) (*jwt.Token, error) {
 
 func (a *Authenticator) GenerateCookie(expirationDate time.Time, jwt string) *http.Cookie {
 	return &http.Cookie{
-		Name:     "gofs-login",
+		Name:     "gofs_session",
 		Value:    jwt,
 		Path:     "/",
 		MaxAge:   int(time.Until(expirationDate)),

@@ -18,7 +18,6 @@ func mapUser(u User) *models.User {
 	return &models.User{
 		ID:         u.ID,
 		Email:      u.Email,
-		Token:      u.Token.String,
 		BucketName: u.BucketName,
 	}
 

@@ -20,8 +20,7 @@ type FileMetum struct {
 }
 
 type User struct {
-	ID         string         `json:"id"`
-	Email      string         `json:"email"`
-	Token      sql.NullString `json:"token"`
-	BucketName string         `json:"bucket_name"`
+	ID         string `json:"id"`
+	Email      string `json:"email"`
+	BucketName string `json:"bucket_name"`
 }
