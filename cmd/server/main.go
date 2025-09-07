@@ -28,7 +28,7 @@ func main() {
 	}
 	defer db.Conn.Close()
 
-	storage, err := setupStorage(cfg.StorageProvider, cfg.BucketName)
+	storage, err := setupStorage(cfg.StorageProvider, cfg.ProjectID)
 	if err != nil {
 		log.Fatalf("main.setupStorage failed: %v", err)
 	}
@@ -71,11 +71,11 @@ func setupDB(driverName string, connStr string) (*sqlite.SQLiteDB, error) {
 	}
 }
 
-func setupStorage(storageProvider string, bucket string) (repositories.StorageRepository, error) {
+func setupStorage(storageProvider string, projectID string) (repositories.StorageRepository, error) {
 	switch storageProvider {
 	case "gcs":
 		ctx := context.Background()
-		return gcs.NewStorage(ctx, bucket)
+		return gcs.NewStorage(ctx, projectID)
 	default:
 		return nil, fmt.Errorf("unsupported cloud provider: %s", storageProvider)
 	}

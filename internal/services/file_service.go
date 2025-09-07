@@ -17,8 +17,8 @@ import (
 
 type FileService interface {
 	ProcessBatch(ctx context.Context, batch []*models.FileMeta) []error
-	DownloadFile(ctx context.Context, id string) (io.ReadCloser, error)
-	DeleteFile(ctx context.Context, id string) error
+	DownloadFile(ctx context.Context, id string, owner string) (io.ReadCloser, error)
+	DeleteFile(ctx context.Context, id string, owner string) error
 	StageFileToDisk(ctx context.Context, fileName string, reader io.Reader) (string, int64, error)
 }
 
@@ -78,8 +78,6 @@ func (fs *fileService) ProcessBatch(ctx context.Context, batch []*models.FileMet
 				ThumbID:     "",
 				Name:        fmt.Sprintf("thumb-%s", fm.Name),
 				ContentType: "image/jpeg",
-				// Size:        bytesWritten,
-				// UploadDate:  time.Now(),
 				Owner:       fm.Owner,
 				TmpFilePath: path,
 			}
@@ -102,7 +100,7 @@ func (fs *fileService) ProcessBatch(ctx context.Context, batch []*models.FileMet
 
 			if err := fs.processFile(ctx, fm); err != nil {
 				if fm.ThumbID != "" {
-					if err = fs.DeleteFile(ctx, fm.ThumbID); err != nil {
+					if err = fs.DeleteFile(ctx, fm.ThumbID, fm.Owner); err != nil {
 						// TODO setup logger
 						// msg := fmt.Sprintf("CRITICAL - Delete File: Failed to delete orphaned thumbnail '%s'", fm.ThumbID)
 						// fs.logger.Write(msg)
@@ -134,8 +132,8 @@ func (fs *fileService) ProcessBatch(ctx context.Context, batch []*models.FileMet
 	return batchErrs
 }
 
-func (fs *fileService) DownloadFile(ctx context.Context, id string) (io.ReadCloser, error) {
-	gcsReader, err := fs.storage.Download(ctx, id)
+func (fs *fileService) DownloadFile(ctx context.Context, id string, owner string) (io.ReadCloser, error) {
+	gcsReader, err := fs.storage.Download(ctx, id, owner)
 	if err != nil {
 		return nil, fmt.Errorf("[services.GetFile] failed to get file from storage: %w", err)
 	}
@@ -143,9 +141,9 @@ func (fs *fileService) DownloadFile(ctx context.Context, id string) (io.ReadClos
 	return gcsReader, nil
 }
 
-func (fs *fileService) DeleteFile(ctx context.Context, id string) error {
-	if err := fs.storage.Delete(ctx, id); err != nil {
-		return fmt.Errorf("services.DeleteFile: failed to delete %s from storage: %w", id, err)
+func (fs *fileService) DeleteFile(ctx context.Context, id string, owner string) error {
+	if err := fs.storage.Delete(ctx, id, owner); err != nil {
+		return fmt.Errorf("[services.DeleteFile] failed to delete %s from storage: %w", id, err)
 	}
 	return nil
 }
@@ -188,13 +186,13 @@ func (fs *fileService) StageFileToDisk(ctx context.Context, fileName string, rea
 
 func (fs *fileService) processFile(ctx context.Context, fm *models.FileMeta) error {
 	var err error
-	fm.Size, fm.UploadDate, err = fs.storage.Upload(ctx, fm.ID, fm.TmpFilePath)
+	fm.Size, fm.UploadDate, err = fs.storage.Upload(ctx, fm.ID, fm.Owner, fm.TmpFilePath)
 	if err != nil {
 		return fmt.Errorf("[fileService.processFile] upload failed for %s: %w", fm.Name, err)
 	}
 
 	if err := fs.fileMetaService.SaveFileMeta(ctx, fm); err != nil {
-		if rbErr := fs.DeleteFile(ctx, fm.ID); rbErr != nil {
+		if rbErr := fs.DeleteFile(ctx, fm.ID, fm.Owner); rbErr != nil {
 			// TODO setup logger
 			// msg := fmt.Sprintf("CRITICAL: failed to delete orphaned file %s from storage: %v", fm.Name, rbErr)
 			// fs.logger.Write(msg)

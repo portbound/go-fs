@@ -17,6 +17,7 @@ type Config struct {
 	TmpDir          string `envconfig:"TMP_DIR" default:"./local/tmp"`
 	LogDir          string `envconfig:"LOG_DIR" default:"./local/logs"`
 	GoogleClientID  string `envconfig:"GOOGLE_CLIENT_ID" required:"true"`
+	ProjectID       string `envconfig:"GCS_PROJECT_ID" required:"true"`
 	JWTSecret       string `envconfig:"JWT_SECRET" required:"true"`
 }
 
@@ -31,4 +32,3 @@ func Load() (*Config, error) {
 
 	return &cfg, nil
 }
-

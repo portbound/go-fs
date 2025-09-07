@@ -8,13 +8,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"mime"
 	"mime/multipart"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/portbound/go-fs/internal/middleware"
@@ -24,12 +25,12 @@ import (
 )
 
 type APIHandler struct {
-	fileService     services.FileService
-	fileMetaService services.FileMetaService
+	fs  services.FileService
+	fms services.FileMetaService
 }
 
 func NewAPIHandler(fs services.FileService, fms services.FileMetaService) *APIHandler {
-	return &APIHandler{fileService: fs, fileMetaService: fms}
+	return &APIHandler{fs: fs, fms: fms}
 }
 
 func (h *APIHandler) RegisterRoutes(mux *http.ServeMux) {
@@ -43,7 +44,8 @@ func (h *APIHandler) RegisterRoutes(mux *http.ServeMux) {
 func (h *APIHandler) handleUploadFile(w http.ResponseWriter, r *http.Request) {
 	var errs []error
 	var batch []*models.FileMeta
-	user, ok := r.Context().Value(middleware.UserEmailKey).(string)
+
+	requesterEmail, ok := r.Context().Value(middleware.RequesterEmailKey).(string)
 	if !ok {
 		response.WriteJSONError(w, http.StatusBadRequest, fmt.Sprintf("Requester: %s not known", requesterEmail))
 		return
@@ -68,10 +70,14 @@ func (h *APIHandler) handleUploadFile(w http.ResponseWriter, r *http.Request) {
 		defer part.Close()
 
 		if part.FileName() != "" {
-			// TODO bail if it's not img or video
-			// if part.Header.Get("Content-Type")
+			contentType := part.Header.Get("Content-Type")
+			metaType := strings.Split(contentType, "/")[0]
+			if metaType != "image" && metaType != "video" {
+				response.WriteJSONError(w, http.StatusBadRequest, fmt.Sprintf("file type not allowed: %s", metaType))
+				return
+			}
 			id := uuid.New().String()
-			path, _, err := h.fileService.StageFileToDisk(r.Context(), id, part)
+			path, _, err := h.fs.StageFileToDisk(r.Context(), id, part)
 			if err != nil {
 				errs = append(errs, fmt.Errorf("[handleUploadFile] failed to stage %s to disk (skipping): %v", part.FileName(), err))
 				continue
@@ -81,17 +87,14 @@ func (h *APIHandler) handleUploadFile(w http.ResponseWriter, r *http.Request) {
 			batch = append(batch, &models.FileMeta{
 				ID:          id,
 				Name:        filepath.Base(part.FileName()),
-				ContentType: part.Header.Get("Content-Type"),
-				// Size:        bytesWritten,
-				// UploadDate:  time.Now(),
-				// Owner:       "me",
-				Owner:       user,
+				ContentType: contentType,
+				Owner:       requesterEmail,
 				TmpFilePath: path,
 			})
 		}
 	}
 
-	batchErrs := h.fileService.ProcessBatch(r.Context(), batch)
+	batchErrs := h.fs.ProcessBatch(r.Context(), batch)
 	if batchErrs != nil {
 		errs = append(errs, batchErrs...)
 	}
@@ -113,7 +116,16 @@ func (h *APIHandler) handleUploadFile(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *APIHandler) handleDownloadFile(w http.ResponseWriter, r *http.Request) {
-	fm, err := h.fileMetaService.LookupFileMeta(r.Context(), r.PathValue("id"))
+	requesterEmail, ok := r.Context().Value(middleware.RequesterEmailKey).(string)
+	if !ok {
+		response.WriteJSONError(w, http.StatusBadRequest, fmt.Sprintf("Requester: %s not known", requesterEmail))
+		return
+	}
+
+	dbCtx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+
+	fm, err := h.fms.LookupFileMeta(dbCtx, r.PathValue("id"))
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			response.WriteJSONError(w, http.StatusNotFound, err.Error())
@@ -123,7 +135,12 @@ func (h *APIHandler) handleDownloadFile(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	gcsReader, err := h.fileService.DownloadFile(r.Context(), fm.ID)
+	if requesterEmail != fm.Owner {
+		response.WriteJSONError(w, http.StatusForbidden, fmt.Sprintf("Access denied for %s", requesterEmail))
+		return
+	}
+
+	gcsReader, err := h.fs.DownloadFile(r.Context(), fm.ID, fm.Owner)
 	if err != nil {
 		response.WriteJSONError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -134,12 +151,14 @@ func (h *APIHandler) handleDownloadFile(w http.ResponseWriter, r *http.Request) 
 	w.WriteHeader(http.StatusOK)
 
 	if _, err := io.Copy(w, gcsReader); err != nil {
-		log.Printf("failed to stream file to client: %v", err)
+		response.WriteJSONError(w, http.StatusInternalServerError, fmt.Sprintf("failed to stream file to client: %v", err))
+		return
 	}
+	response.WriteJSON(w, http.StatusOK, nil)
 }
 
 func (h *APIHandler) handleGetFileMeta(w http.ResponseWriter, r *http.Request) {
-	afm, err := h.fileMetaService.LookupAllFileMeta(r.Context())
+	afm, err := h.fms.LookupAllFileMeta(r.Context())
 	if err != nil {
 		response.WriteJSONError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -150,7 +169,7 @@ func (h *APIHandler) handleGetFileMeta(w http.ResponseWriter, r *http.Request) {
 func (h *APIHandler) handleDeleteFile(w http.ResponseWriter, r *http.Request) {
 	var errs []error
 
-	fm, err := h.fileMetaService.LookupFileMeta(r.Context(), r.PathValue("id"))
+	fm, err := h.fms.LookupFileMeta(r.Context(), r.PathValue("id"))
 	if err != nil {
 		response.WriteJSONError(w, http.StatusNotFound, err.Error())
 		return
@@ -196,7 +215,7 @@ func (h *APIHandler) handleDeleteBatch(w http.ResponseWriter, r *http.Request) {
 	for _, id := range ids {
 		wg.Add(1)
 		go func(id string) {
-			fm, err := h.fileMetaService.LookupFileMeta(ctx, id)
+			fm, err := h.fms.LookupFileMeta(ctx, id)
 			if err != nil {
 				ch <- fmt.Errorf("[services.DeleteFileMeta] file not found for id %s: %w", id, err)
 				return
