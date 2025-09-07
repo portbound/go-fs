@@ -14,7 +14,7 @@ import (
 
 type contextKey string
 
-const UserEmailKey contextKey = "userEmail"
+const RequesterEmailKey contextKey = "userEmail"
 
 type AuthMiddleware struct {
 	authenticator *auth.Authenticator
@@ -58,7 +58,7 @@ func (mw *AuthMiddleware) RequireWebAuth(next http.Handler) http.Handler {
 			return
 		}
 
-		ctx = context.WithValue(r.Context(), UserEmailKey, user.Email)
+		ctx = context.WithValue(r.Context(), RequesterEmailKey, user.Email)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
@@ -93,7 +93,7 @@ func (mw *AuthMiddleware) RequireAPIAuth(next http.Handler) http.Handler {
 			return
 		}
 
-		ctx = context.WithValue(r.Context(), UserEmailKey, user.Email)
+		ctx = context.WithValue(r.Context(), RequesterEmailKey, user.Email)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
