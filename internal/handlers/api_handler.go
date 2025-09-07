@@ -45,7 +45,7 @@ func (h *APIHandler) handleUploadFile(w http.ResponseWriter, r *http.Request) {
 	var batch []*models.FileMeta
 	user, ok := r.Context().Value(middleware.UserEmailKey).(string)
 	if !ok {
-		response.WriteJSONError(w, http.StatusBadRequest, "user unknown")
+		response.WriteJSONError(w, http.StatusBadRequest, fmt.Sprintf("Requester: %s not known", requesterEmail))
 		return
 	}
 
@@ -73,7 +73,7 @@ func (h *APIHandler) handleUploadFile(w http.ResponseWriter, r *http.Request) {
 			id := uuid.New().String()
 			path, _, err := h.fileService.StageFileToDisk(r.Context(), id, part)
 			if err != nil {
-				errs = append(errs, fmt.Errorf("handleUploadFile: StageFileToDisk() failed: %v - skipping: %s", err, part.FileName()))
+				errs = append(errs, fmt.Errorf("[handleUploadFile] failed to stage %s to disk (skipping): %v", part.FileName(), err))
 				continue
 			}
 			defer os.Remove(path)
@@ -157,19 +157,19 @@ func (h *APIHandler) handleDeleteFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if fm.ThumbID != "" {
-		if err := h.fileService.DeleteFile(r.Context(), fm.ThumbID); err != nil {
-			errs = append(errs, fmt.Errorf("services.DeleteFile: failed to delete thumbnail for %s: %v", fm.ID, err))
+		if err := h.fs.DeleteFile(r.Context(), fm.ThumbID, fm.Owner); err != nil {
+			errs = append(errs, fmt.Errorf("[services.DeleteFile] failed to delete thumbnail for %s: %v", fm.ID, err))
 		}
-		if err := h.fileMetaService.DeleteFileMeta(r.Context(), fm.ThumbID); err != nil {
-			errs = append(errs, fmt.Errorf("services.DeleteFileMeta: failed to delete file meta for %s: %v", fm.ID, err))
+		if err := h.fms.DeleteFileMeta(r.Context(), fm.ThumbID); err != nil {
+			errs = append(errs, fmt.Errorf("[services.DeleteFileMeta] failed to delete file meta for %s: %v", fm.ID, err))
 		}
 	}
 
-	if err := h.fileService.DeleteFile(r.Context(), fm.ID); err != nil {
-		errs = append(errs, fmt.Errorf("services.DeleteFile: failed to delete file %s: %v", fm.ID, err))
+	if err := h.fs.DeleteFile(r.Context(), fm.ID, fm.Owner); err != nil {
+		errs = append(errs, fmt.Errorf("[services.DeleteFile] failed to delete file %s: %v", fm.ID, err))
 	}
-	if err := h.fileMetaService.DeleteFileMeta(r.Context(), fm.ID); err != nil {
-		errs = append(errs, fmt.Errorf("services.DeleteFileMeta: failed to delete file meta for %s: %v", fm.ID, err))
+	if err := h.fms.DeleteFileMeta(r.Context(), fm.ID); err != nil {
+		errs = append(errs, fmt.Errorf("[services.DeleteFileMeta] failed to delete file meta for %s: %v", fm.ID, err))
 	}
 
 	if len(errs) > 0 {
@@ -198,24 +198,24 @@ func (h *APIHandler) handleDeleteBatch(w http.ResponseWriter, r *http.Request) {
 		go func(id string) {
 			fm, err := h.fileMetaService.LookupFileMeta(ctx, id)
 			if err != nil {
-				ch <- fmt.Errorf("services.LookupFileMeta: file not found for id %s: %w", id, err)
+				ch <- fmt.Errorf("[services.DeleteFileMeta] file not found for id %s: %w", id, err)
 				return
 			}
 
 			if fm.ThumbID != "" {
-				if err := h.fileService.DeleteFile(ctx, fm.ThumbID); err != nil {
-					ch <- fmt.Errorf("services.DeleteFile: failed to delete thumbnail for %s: %v", fm.ID, err)
+				if err := h.fs.DeleteFile(ctx, fm.ThumbID, fm.Owner); err != nil {
+					ch <- fmt.Errorf("[services.DeleteFile] failed to delete thumbnail for %s: %v", fm.ID, err)
 				}
-				if err := h.fileMetaService.DeleteFileMeta(ctx, fm.ThumbID); err != nil {
-					ch <- fmt.Errorf("services.DeleteFileMeta: failed to delete file meta for %s: %v", fm.ID, err)
+				if err := h.fms.DeleteFileMeta(ctx, fm.ThumbID); err != nil {
+					ch <- fmt.Errorf("[services.DeleteFileMeta] failed to delete file meta for %s: %v", fm.ID, err)
 				}
 			}
 
-			if err := h.fileService.DeleteFile(ctx, fm.ID); err != nil {
-				ch <- fmt.Errorf("services.DeleteFile: failed to delete file %s: %v", fm.ID, err)
+			if err := h.fs.DeleteFile(ctx, fm.ID, fm.Owner); err != nil {
+				ch <- fmt.Errorf("[services.DeleteFile] failed to delete file %s: %v", fm.ID, err)
 			}
-			if err := h.fileMetaService.DeleteFileMeta(ctx, fm.ID); err != nil {
-				ch <- fmt.Errorf("services.DeleteFileMeta: failed to delete file meta for %s: %v", fm.ID, err)
+			if err := h.fms.DeleteFileMeta(ctx, fm.ID); err != nil {
+				ch <- fmt.Errorf("[services.DeleteFileMeta] failed to delete file meta for %s: %v", fm.ID, err)
 			}
 		}(id)
 	}

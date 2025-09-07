@@ -18,17 +18,17 @@ type DBConnectionDetails struct {
 func NewDBConnection(d *DBConnectionDetails) (*DBConnection, error) {
 	db, err := sql.Open(d.DriverName, d.ConnStr)
 	if err != nil {
-		return nil, fmt.Errorf("NewDBConnection.NewDB: failed to open sql connection: %w", err)
+		return nil, fmt.Errorf("[NewDBConnection.NewDB] failed to open sql connection: %w", err)
 	}
 
 	err = db.Ping()
 	if err != nil {
-		return nil, fmt.Errorf("NewDBConnection.NewDB: pinged db but got no response: %w", err)
+		return nil, fmt.Errorf("[NewDBConnection.NewDB] pinged db but got no response: %w", err)
 	}
 
 	_, err = db.Exec(d.Schema)
 	if err != nil {
-		return nil, fmt.Errorf("NewDBConnection.NewDB: failed to create table: %w", err)
+		return nil, fmt.Errorf("[NewDBConnection.NewDB] failed to create table: %w", err)
 	}
 
 	return &DBConnection{DB: db}, nil

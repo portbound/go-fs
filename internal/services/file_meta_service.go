@@ -25,7 +25,7 @@ func NewFileMetaService(fileRepo repositories.FileMetaRepository) FileMetaServic
 
 func (fms *fileMetaService) SaveFileMeta(ctx context.Context, fm *models.FileMeta) error {
 	if err := fms.db.CreateFileMeta(ctx, fm); err != nil {
-		return fmt.Errorf("services.SaveFileMeta: failed to save file metadata: %w", err)
+		return fmt.Errorf("[services.SaveFileMeta] failed to save file metadata: %w", err)
 	}
 	return nil
 }
@@ -33,7 +33,7 @@ func (fms *fileMetaService) SaveFileMeta(ctx context.Context, fm *models.FileMet
 func (fms *fileMetaService) LookupFileMeta(ctx context.Context, id string) (*models.FileMeta, error) {
 	fm, err := fms.db.GetFileMeta(ctx, id)
 	if err != nil {
-		return nil, fmt.Errorf("services.LookupFileMeta: failed to get file for id '%s': %w", id, err)
+		return nil, fmt.Errorf("[services.LookupFileMeta] failed to get file for id '%s': %w", id, err)
 	}
 	return fm, nil
 }
@@ -41,7 +41,7 @@ func (fms *fileMetaService) LookupFileMeta(ctx context.Context, id string) (*mod
 func (fms *fileMetaService) LookupAllFileMeta(ctx context.Context) ([]*models.FileMeta, error) {
 	data, err := fms.db.GetAllFileMeta(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("services.GetFileIDs: failed to get file ids from DB: %w", err)
+		return nil, fmt.Errorf("[services.GetFileIDs] failed to get file ids from DB: %w", err)
 	}
 
 	var fm []*models.FileMeta
@@ -55,7 +55,7 @@ func (fms *fileMetaService) LookupAllFileMeta(ctx context.Context) ([]*models.Fi
 
 func (fms *fileMetaService) DeleteFileMeta(ctx context.Context, id string) error {
 	if err := fms.db.DeleteFileMeta(ctx, id); err != nil {
-		return fmt.Errorf("services.DeleteFileMeta: failed to delete file metadata: %w", err)
+		return fmt.Errorf("[services.DeleteFileMeta] failed to delete file metadata: %w", err)
 	}
 	return nil
 }

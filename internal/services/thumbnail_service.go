@@ -24,19 +24,19 @@ func GenerateThumbnail(ctx context.Context, fm *models.FileMeta) (io.Reader, err
 		thumbPath,
 	)
 	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf("ffmpeg failed: %w", err)
+		return nil, fmt.Errorf("[GenerateThumbnail] ffmpeg cmd failed: %w", err)
 	}
 
 	file, err := os.Open(thumbPath)
 	if err != nil {
-		return nil, fmt.Errorf("could not open temp thumbnail file: %w", err)
+		return nil, fmt.Errorf("[GenerateThumbnail] failed could not open tmp thumbnail file: %w", err)
 	}
 	defer file.Close()
 	defer os.Remove(thumbPath)
 
 	buf := new(bytes.Buffer)
 	if _, err := io.Copy(buf, file); err != nil {
-		return nil, fmt.Errorf("services.Generate: failed to copy bytes for thumbnail: %w", err)
+		return nil, fmt.Errorf("[GenerateThumbnail] failed to copy bytes to thumbnail buffer: %w", err)
 	}
 
 	return buf, nil

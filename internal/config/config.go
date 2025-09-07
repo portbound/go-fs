@@ -26,7 +26,7 @@ func Load() (*Config, error) {
 	var cfg Config
 	err := envconfig.Process("", &cfg)
 	if err != nil {
-		return nil, fmt.Errorf("failed to process config from environment: %w", err)
+		return nil, fmt.Errorf("[config.Load] failed to process config from environment: %w", err)
 	}
 
 	return &cfg, nil
