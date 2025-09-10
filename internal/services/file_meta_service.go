@@ -10,7 +10,7 @@ import (
 
 type FileMetaService interface {
 	SaveFileMeta(ctx context.Context, fm *models.FileMeta) error
-	LookupFileMeta(ctx context.Context, id string) (*models.FileMeta, error)
+	LookupFileMeta(ctx context.Context, id string, owner *models.User) (*models.FileMeta, error)
 	LookupAllFileMeta(ctx context.Context, owner *models.User) ([]*models.FileMeta, error)
 	DeleteFileMeta(ctx context.Context, id string) error
 }
@@ -30,8 +30,8 @@ func (fms *fileMetaService) SaveFileMeta(ctx context.Context, fm *models.FileMet
 	return nil
 }
 
-func (fms *fileMetaService) LookupFileMeta(ctx context.Context, id string) (*models.FileMeta, error) {
-	fm, err := fms.db.GetFileMeta(ctx, id)
+func (fms *fileMetaService) LookupFileMeta(ctx context.Context, id string, owner *models.User) (*models.FileMeta, error) {
+	fm, err := fms.db.GetFileMeta(ctx, id, owner)
 	if err != nil {
 		return nil, fmt.Errorf("[services.LookupFileMeta] failed to get file for id '%s': %w", id, err)
 	}

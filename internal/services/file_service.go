@@ -36,17 +36,14 @@ func NewFileService(storageRepo repositories.StorageRepository, fileMetaService 
 	}
 }
 
-func (fs *fileService) ProcessBatch(ctx context.Context, batch []*models.FileMeta, user *models.User) []error {
+func (fs *fileService) ProcessBatch(ctx context.Context, batch []*models.FileMeta, owner *models.User) []error {
 	var wg sync.WaitGroup
 	var batchErrs []error
 
 	ch := make(chan error)
 	for _, fm := range batch {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-
-			existing, err := fs.fileMetaService.LookupFileMeta(ctx, fm.ID)
+		wg.Go(func() {
+			existing, err := fs.fileMetaService.LookupFileMeta(ctx, fm.ID, owner)
 			if err != nil {
 				if !errors.Is(err, sql.ErrNoRows) {
 					ch <- fmt.Errorf("[services.ProcessBatch] '%s': %w", fm.Name, err)
@@ -82,7 +79,7 @@ func (fs *fileService) ProcessBatch(ctx context.Context, batch []*models.FileMet
 				TmpFilePath: path,
 			}
 
-			if err = fs.processFile(ctx, thumbFm, user); err != nil {
+			if err = fs.processFile(ctx, thumbFm, owner); err != nil {
 				ch <- fmt.Errorf("[services.ProcessBatch] failed to process thumbnail for %s: %w", fm.Name, err)
 				return
 			}
@@ -98,9 +95,9 @@ func (fs *fileService) ProcessBatch(ctx context.Context, batch []*models.FileMet
 			}
 			defer fileReader.Close()
 
-			if err := fs.processFile(ctx, fm, user); err != nil {
+			if err := fs.processFile(ctx, fm, owner); err != nil {
 				if fm.ThumbID != "" {
-					if err = fs.DeleteFile(ctx, fm.ThumbID, user); err != nil {
+					if err = fs.DeleteFile(ctx, fm.ThumbID, owner); err != nil {
 						// TODO setup logger
 						// msg := fmt.Sprintf("CRITICAL - Delete File: Failed to delete orphaned thumbnail '%s'", fm.ThumbID)
 						// fs.logger.Write(msg)
@@ -115,7 +112,7 @@ func (fs *fileService) ProcessBatch(ctx context.Context, batch []*models.FileMet
 			// msg = fmt.Sprintf("File Upload Success: File '%s'", fm.Name)
 			// fs.logger.Write(msg)
 			ch <- nil
-		}()
+		})
 	}
 
 	go func() {

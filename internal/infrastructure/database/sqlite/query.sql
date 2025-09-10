@@ -11,7 +11,8 @@ INSERT INTO file_meta (
 	 
 -- name: GetFileMeta :one
 SELECT * FROM file_meta 
-WHERE id = ? LIMIT 1;
+WHERE id = ? 
+AND owner = ? LIMIT 1;
 
 -- name: GetAllFileMeta :many
 SELECT * FROM file_meta

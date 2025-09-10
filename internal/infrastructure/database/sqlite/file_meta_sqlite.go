@@ -23,8 +23,12 @@ func (db *SQLiteDB) CreateFileMeta(ctx context.Context, filemeta *models.FileMet
 	return db.Queries.CreateFileMeta(ctx, params)
 }
 
-func (db *SQLiteDB) GetFileMeta(ctx context.Context, id string) (*models.FileMeta, error) {
-	file, err := db.Queries.GetFileMeta(ctx, id)
+func (db *SQLiteDB) GetFileMeta(ctx context.Context, id string, owner *models.User) (*models.FileMeta, error) {
+	params := GetFileMetaParams{
+		ID:    id,
+		Owner: owner.Email,
+	}
+	file, err := db.Queries.GetFileMeta(ctx, params)
 	if err != nil {
 		return nil, err
 	}

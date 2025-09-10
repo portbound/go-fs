@@ -9,7 +9,7 @@ import (
 
 type FileMetaRepository interface {
 	CreateFileMeta(ctx context.Context, filemeta *models.FileMeta) error
-	GetFileMeta(ctx context.Context, id string) (*models.FileMeta, error)
+	GetFileMeta(ctx context.Context, id string, owner *models.User) (*models.FileMeta, error)
 	GetAllFileMeta(ctx context.Context, owner *models.User) ([]*models.FileMeta, error)
 	DeleteFileMeta(ctx context.Context, id string) error
 }

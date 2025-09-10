@@ -124,7 +124,7 @@ func (h *APIHandler) handleDownloadFile(w http.ResponseWriter, r *http.Request) 
 	dbCtx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
 
-	fm, err := h.fms.LookupFileMeta(dbCtx, r.PathValue("id"))
+	fm, err := h.fms.LookupFileMeta(dbCtx, r.PathValue("id"), user)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			response.WriteJSONError(w, http.StatusNotFound, err.Error())
@@ -186,7 +186,7 @@ func (h *APIHandler) handleDeleteFile(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	id := r.PathValue("id")
-	fm, err := h.fms.LookupFileMeta(dbCtx, id)
+	fm, err := h.fms.LookupFileMeta(dbCtx, id, user)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			response.WriteJSONError(w, http.StatusNotFound, fmt.Sprintf("[handleDeleteFile] file not found for id: %s", id))
@@ -247,7 +247,7 @@ func (h *APIHandler) handleDeleteBatch(w http.ResponseWriter, r *http.Request) {
 	for _, id := range ids {
 		wg.Add(1)
 		go func(id string) {
-			fm, err := h.fms.LookupFileMeta(ctx, id)
+			fm, err := h.fms.LookupFileMeta(ctx, id, user)
 			if err != nil {
 				ch <- fmt.Errorf("[services.DeleteFileMeta] file not found for id %s: %w", id, err)
 				return
