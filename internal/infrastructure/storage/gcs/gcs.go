@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"time"
 
 	"cloud.google.com/go/storage"
@@ -25,15 +24,9 @@ func NewStorage(ctx context.Context, projectID string) (*Storage, error) {
 	return &Storage{client: client, projectID: projectID}, nil
 }
 
-func (s *Storage) Upload(ctx context.Context, fileName string, bucketName string, diskPath string) (int64, time.Time, error) {
-	src, err := os.Open(diskPath)
-	if err != nil {
-		return 0, time.Time{}, fmt.Errorf("[gcs.Upload] failed to open file %s: %w", diskPath, err)
-	}
-	defer src.Close()
-
+func (s *Storage) Upload(ctx context.Context, fileName string, bucketName string, src io.Reader) (int64, time.Time, error) {
 	bkt := s.client.Bucket(bucketName)
-	_, err = bkt.Attrs(ctx)
+	_, err := bkt.Attrs(ctx)
 	if err != nil {
 		if !errors.Is(err, storage.ErrBucketNotExist) {
 			return 0, time.Time{}, fmt.Errorf("[gcs.Upload] failed to verify bucket attributes for %s: %w", bucketName, err)

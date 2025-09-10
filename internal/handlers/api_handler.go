@@ -46,7 +46,7 @@ func (h *APIHandler) handleUploadFile(w http.ResponseWriter, r *http.Request) {
 	var errs []error
 	var batch []*models.FileMeta
 
-	user, ok := h.getUserFromContext(w, r.Context())
+	owner, ok := h.getUserFromContext(w, r.Context())
 	if !ok {
 		return
 	}
@@ -88,13 +88,13 @@ func (h *APIHandler) handleUploadFile(w http.ResponseWriter, r *http.Request) {
 				ID:          id,
 				Name:        filepath.Base(part.FileName()),
 				ContentType: contentType,
-				Owner:       user.Email,
+				Owner:       owner.Email,
 				TmpFilePath: path,
 			})
 		}
 	}
 
-	batchErrs := h.fs.ProcessBatch(r.Context(), batch, user)
+	batchErrs := h.fs.ProcessBatch(r.Context(), batch, owner)
 	if batchErrs != nil {
 		errs = append(errs, batchErrs...)
 	}
