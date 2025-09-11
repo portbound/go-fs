@@ -13,6 +13,7 @@ type Querier interface {
 	DeleteFileMeta(ctx context.Context, id string) error
 	GetAllFileMeta(ctx context.Context, owner string) ([]FileMetum, error)
 	GetFileMeta(ctx context.Context, arg GetFileMetaParams) (FileMetum, error)
+	GetFileMetaByNameAndOwner(ctx context.Context, arg GetFileMetaByNameAndOwnerParams) (FileMetum, error)
 	GetUser(ctx context.Context, email string) (User, error)
 }
 

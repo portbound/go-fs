@@ -36,6 +36,9 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.getFileMetaStmt, err = db.PrepareContext(ctx, getFileMeta); err != nil {
 		return nil, fmt.Errorf("error preparing query GetFileMeta: %w", err)
 	}
+	if q.getFileMetaByNameAndOwnerStmt, err = db.PrepareContext(ctx, getFileMetaByNameAndOwner); err != nil {
+		return nil, fmt.Errorf("error preparing query GetFileMetaByNameAndOwner: %w", err)
+	}
 	if q.getUserStmt, err = db.PrepareContext(ctx, getUser); err != nil {
 		return nil, fmt.Errorf("error preparing query GetUser: %w", err)
 	}
@@ -62,6 +65,11 @@ func (q *Queries) Close() error {
 	if q.getFileMetaStmt != nil {
 		if cerr := q.getFileMetaStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing getFileMetaStmt: %w", cerr)
+		}
+	}
+	if q.getFileMetaByNameAndOwnerStmt != nil {
+		if cerr := q.getFileMetaByNameAndOwnerStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing getFileMetaByNameAndOwnerStmt: %w", cerr)
 		}
 	}
 	if q.getUserStmt != nil {
@@ -106,23 +114,25 @@ func (q *Queries) queryRow(ctx context.Context, stmt *sql.Stmt, query string, ar
 }
 
 type Queries struct {
-	db                 DBTX
-	tx                 *sql.Tx
-	createFileMetaStmt *sql.Stmt
-	deleteFileMetaStmt *sql.Stmt
-	getAllFileMetaStmt *sql.Stmt
-	getFileMetaStmt    *sql.Stmt
-	getUserStmt        *sql.Stmt
+	db                            DBTX
+	tx                            *sql.Tx
+	createFileMetaStmt            *sql.Stmt
+	deleteFileMetaStmt            *sql.Stmt
+	getAllFileMetaStmt            *sql.Stmt
+	getFileMetaStmt               *sql.Stmt
+	getFileMetaByNameAndOwnerStmt *sql.Stmt
+	getUserStmt                   *sql.Stmt
 }
 
 func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 	return &Queries{
-		db:                 tx,
-		tx:                 tx,
-		createFileMetaStmt: q.createFileMetaStmt,
-		deleteFileMetaStmt: q.deleteFileMetaStmt,
-		getAllFileMetaStmt: q.getAllFileMetaStmt,
-		getFileMetaStmt:    q.getFileMetaStmt,
-		getUserStmt:        q.getUserStmt,
+		db:                            tx,
+		tx:                            tx,
+		createFileMetaStmt:            q.createFileMetaStmt,
+		deleteFileMetaStmt:            q.deleteFileMetaStmt,
+		getAllFileMetaStmt:            q.getAllFileMetaStmt,
+		getFileMetaStmt:               q.getFileMetaStmt,
+		getFileMetaByNameAndOwnerStmt: q.getFileMetaByNameAndOwnerStmt,
+		getUserStmt:                   q.getUserStmt,
 	}
 }

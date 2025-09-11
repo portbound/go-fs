@@ -1,6 +1,6 @@
 CREATE TABLE IF NOT EXISTS users (
 		id TEXT NOT NULL PRIMARY KEY,
-		email TEXT NOT NULL UNIQUE, 
+		email TEXT NOT NULL UNIQUE,
 		bucket_name TEXT NOT NULL UNIQUE
 );
 
@@ -8,9 +8,10 @@ CREATE TABLE IF NOT EXISTS file_meta (
 		id TEXT NOT NULL PRIMARY KEY, 
 		parent_id TEXT,
 		thumb_id TEXT,
-		name TEXT NOT NULL UNIQUE, 
+		name TEXT NOT NULL, 
 		content_type TEXT NOT NULL,
 		size INTEGER NOT NULL,
 		upload_date TEXT NOT NULL,
-		owner TEXT NOT NULL
+		owner TEXT NOT NULL,
+		UNIQUE (name, owner)
 )

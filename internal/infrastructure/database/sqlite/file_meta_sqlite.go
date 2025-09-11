@@ -35,6 +35,18 @@ func (db *SQLiteDB) GetFileMeta(ctx context.Context, id string, owner *models.Us
 	return mapFileMeta(file)
 }
 
+func (db *SQLiteDB) GetFileMetaByNameAndOwner(ctx context.Context, name string, owner *models.User) (*models.FileMeta, error) {
+	params := GetFileMetaByNameAndOwnerParams{
+		Name:  name,
+		Owner: owner.Email,
+	}
+	file, err := db.Queries.GetFileMetaByNameAndOwner(ctx, params)
+	if err != nil {
+		return nil, err
+	}
+	return mapFileMeta(file)
+}
+
 func (db *SQLiteDB) GetAllFileMeta(ctx context.Context, owner *models.User) ([]*models.FileMeta, error) {
 	data, err := db.Queries.GetAllFileMeta(ctx, owner.Email)
 	if err != nil {
@@ -53,6 +65,7 @@ func (db *SQLiteDB) GetAllFileMeta(ctx context.Context, owner *models.User) ([]*
 }
 
 func (db *SQLiteDB) DeleteFileMeta(ctx context.Context, id string) error {
+	time.Sleep(7 * time.Second)
 	return db.Queries.DeleteFileMeta(ctx, id)
 }
 

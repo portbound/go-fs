@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/portbound/go-fs/internal/models"
 	"github.com/portbound/go-fs/internal/repositories"
@@ -21,7 +22,10 @@ func NewUserService(userRepo repositories.UserRepository) UserService {
 }
 
 func (us *userService) LookupUser(ctx context.Context, email string) (*models.User, error) {
-	user, err := us.db.GetUser(ctx, email)
+	dbCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+
+	user, err := us.db.GetUser(dbCtx, email)
 	if err != nil {
 		return nil, fmt.Errorf("[services.GetUser] failed to get user info for email '%s': %w", email, err)
 	}

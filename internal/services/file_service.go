@@ -43,8 +43,7 @@ func (fs *fileService) ProcessBatch(ctx context.Context, batch []*models.FileMet
 	ch := make(chan error)
 	for _, fm := range batch {
 		wg.Go(func() {
-			// TODO wrap this in a function so we can check for filename + bucket uniqueness
-			_, err := fs.fms.LookupFileMeta(ctx, fm.ID, owner)
+			_, err := fs.fms.LookupFileMetaByNameAndOwner(ctx, fm.Name, owner)
 			if err == nil {
 				ch <- fmt.Errorf("[services.ProcessBatch] file %s already exists (skipping)", fm.Name)
 				return

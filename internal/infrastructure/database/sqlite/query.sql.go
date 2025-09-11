@@ -12,7 +12,7 @@ import (
 
 const createFileMeta = `-- name: CreateFileMeta :exec
 INSERT INTO file_meta (
-	id, parent_id, thumb_id, name, content_type, size, upload_date, owner
+	id, parent_id, thumb_id, name, content_type, size, upload_date, owner 
 ) VALUES (
 	?, ?, ?, ?, ?, ?, ?, ?
 )
@@ -104,6 +104,33 @@ type GetFileMetaParams struct {
 
 func (q *Queries) GetFileMeta(ctx context.Context, arg GetFileMetaParams) (FileMetum, error) {
 	row := q.queryRow(ctx, q.getFileMetaStmt, getFileMeta, arg.ID, arg.Owner)
+	var i FileMetum
+	err := row.Scan(
+		&i.ID,
+		&i.ParentID,
+		&i.ThumbID,
+		&i.Name,
+		&i.ContentType,
+		&i.Size,
+		&i.UploadDate,
+		&i.Owner,
+	)
+	return i, err
+}
+
+const getFileMetaByNameAndOwner = `-- name: GetFileMetaByNameAndOwner :one
+SELECT id, parent_id, thumb_id, name, content_type, size, upload_date, owner FROM file_meta
+WHERE name = ?
+AND owner = ? LIMIT 1
+`
+
+type GetFileMetaByNameAndOwnerParams struct {
+	Name  string `json:"name"`
+	Owner string `json:"owner"`
+}
+
+func (q *Queries) GetFileMetaByNameAndOwner(ctx context.Context, arg GetFileMetaByNameAndOwnerParams) (FileMetum, error) {
+	row := q.queryRow(ctx, q.getFileMetaByNameAndOwnerStmt, getFileMetaByNameAndOwner, arg.Name, arg.Owner)
 	var i FileMetum
 	err := row.Scan(
 		&i.ID,
