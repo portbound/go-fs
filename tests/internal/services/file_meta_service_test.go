@@ -32,13 +32,25 @@ func (r *MockFileMetaRepository) GetFileMeta(ctx context.Context, id string, own
 	return fm, nil
 }
 
+func (r *MockFileMetaRepository) GetFileMetaByNameAndOwner(ctx context.Context, name string, owner *models.User) (*models.FileMeta, error) {
+	for _, fm := range r.fileMeta {
+		if fm.Name == name && fm.Owner == owner.Email {
+			return fm, nil
+		}
+	}
+	return nil, sql.ErrNoRows
+}
+
 func (r *MockFileMetaRepository) GetAllFileMeta(ctx context.Context, owner *models.User) ([]*models.FileMeta, error) {
 	var afm []*models.FileMeta
 	for _, fm := range r.fileMeta {
-		afm = append(afm, fm)
+		if fm.Owner == owner.Email {
+			afm = append(afm, fm)
+		}
 	}
 	return afm, nil
 }
+
 func (r *MockFileMetaRepository) DeleteFileMeta(ctx context.Context, id string) error {
 	fm, ok := r.fileMeta[id]
 	if !ok {
