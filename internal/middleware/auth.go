@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/portbound/go-fs/internal/models"
 	"github.com/portbound/go-fs/internal/services"
 	"github.com/portbound/go-fs/pkg/auth"
 	"github.com/portbound/go-fs/pkg/response"
@@ -14,7 +15,7 @@ import (
 
 type contextKey string
 
-const RequesterEmailKey contextKey = "userEmail"
+const RequesterKey contextKey = "user"
 
 type AuthMiddleware struct {
 	authenticator *auth.Authenticator
@@ -37,28 +38,13 @@ func (mw *AuthMiddleware) RequireWebAuth(next http.Handler) http.Handler {
 			return
 		}
 
-		jwt, err := mw.authenticator.ValidateJWT(cookie.Value)
+		user, err := mw.authenticateUser(r.Context(), cookie.Value)
 		if err != nil {
 			response.WriteJSONError(w, http.StatusUnauthorized, err.Error())
 			return
 		}
 
-		userEmail, err := jwt.Claims.GetSubject()
-		if err != nil {
-			response.WriteJSONError(w, http.StatusUnauthorized, err.Error())
-			return
-		}
-
-		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
-		defer cancel()
-
-		user, err := mw.userService.LookupUser(ctx, userEmail)
-		if err != nil {
-			response.WriteJSONError(w, http.StatusForbidden, "")
-			return
-		}
-
-		ctx = context.WithValue(r.Context(), RequesterEmailKey, user.Email)
+		ctx := context.WithValue(r.Context(), RequesterKey, user)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
@@ -72,28 +58,34 @@ func (mw *AuthMiddleware) RequireAPIAuth(next http.Handler) http.Handler {
 		}
 		token := parts[1]
 
-		jwt, err := mw.authenticator.ValidateJWT(token)
+		user, err := mw.authenticateUser(r.Context(), token)
 		if err != nil {
-			response.WriteJSONError(w, http.StatusUnauthorized, err.Error())
+			response.WriteJSONError(w, http.StatusUnauthorized, "failed to authenticate requester")
 			return
 		}
 
-		userEmail, err := jwt.Claims.GetSubject()
-		if err != nil {
-			response.WriteJSONError(w, http.StatusUnauthorized, err.Error())
-			return
-		}
-
-		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
-		defer cancel()
-
-		user, err := mw.userService.LookupUser(ctx, userEmail)
-		if err != nil {
-			response.WriteJSONError(w, http.StatusForbidden, "")
-			return
-		}
-
-		ctx = context.WithValue(r.Context(), RequesterEmailKey, user.Email)
+		ctx := context.WithValue(r.Context(), RequesterKey, user)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+func (mw *AuthMiddleware) authenticateUser(ctx context.Context, token string) (*models.User, error) {
+	jwt, err := mw.authenticator.ValidateJWT(token)
+	if err != nil {
+		return nil, err
+	}
+
+	userEmail, err := jwt.Claims.GetSubject()
+	if err != nil {
+		return nil, err
+	}
+
+	dbCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	user, err := mw.userService.LookupUser(dbCtx, userEmail)
+	if err != nil {
+		return nil, err
+	}
+
+	return user, nil
 }
