@@ -30,7 +30,7 @@ func (r *MockUserRepository) GetUser(ctx context.Context, email string) (*models
 func Test_userService_LookupUser(t *testing.T) {
 	testUser := &models.User{
 		ID:         "1",
-		Email:      "test@gmail.com",
+		Email:      "test@example.com",
 		BucketName: "testBucket",
 	}
 
@@ -45,9 +45,9 @@ func Test_userService_LookupUser(t *testing.T) {
 		{
 			name: "happy path",
 			mockUsers: map[string]*models.User{
-				"test@gmail.com": testUser,
+				"test@example.com": testUser,
 			},
-			lookupEmail: "test@gmail.com",
+			lookupEmail: "test@example.com",
 			want:        testUser,
 			wantErr:     false,
 			expectedErr: nil,
@@ -55,7 +55,7 @@ func Test_userService_LookupUser(t *testing.T) {
 		{
 			name: "user does not exist",
 			mockUsers: map[string]*models.User{
-				"test@gmail.com": testUser,
+				"test@example.com": testUser,
 			},
 			lookupEmail: "nonexistentUser@gmail.com",
 			want:        nil,
@@ -65,7 +65,7 @@ func Test_userService_LookupUser(t *testing.T) {
 		{
 			name:        "user not found in empty repository",
 			mockUsers:   make(map[string]*models.User),
-			lookupEmail: "test@gmail.com",
+			lookupEmail: "test@example.com",
 			want:        nil,
 			wantErr:     true,
 			expectedErr: sql.ErrNoRows,
