@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/portbound/go-fs/internal/models"
 	"github.com/portbound/go-fs/internal/repositories"
@@ -43,7 +44,9 @@ func (fs *fileService) ProcessBatch(ctx context.Context, batch []*models.FileMet
 	ch := make(chan error)
 	for _, fm := range batch {
 		wg.Go(func() {
-			_, err := fs.fms.LookupFileMetaByNameAndOwner(ctx, fm.Name, owner)
+			dbCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+			defer cancel()
+			_, err := fs.fms.LookupFileMetaByNameAndOwner(dbCtx, fm.Name, owner)
 			if err == nil {
 				ch <- fmt.Errorf("[services.ProcessBatch] file %s already exists (skipping)", fm.Name)
 				return
@@ -53,7 +56,9 @@ func (fs *fileService) ProcessBatch(ctx context.Context, batch []*models.FileMet
 				return
 			}
 
-			thumbReader, err := GenerateThumbnail(ctx, fm)
+			thumbCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+			defer cancel()
+			thumbReader, err := GenerateThumbnail(thumbCtx, fm)
 			if err != nil {
 				ch <- fmt.Errorf("[services.ProcessBatch] failed to generate thumbnail for '%s': %w", fm.Name, err)
 				return
@@ -171,7 +176,10 @@ func (fs *fileService) processFile(ctx context.Context, fm *models.FileMeta, own
 		return fmt.Errorf("[fileService.processFile] upload failed for %s: %w", fm.Name, err)
 	}
 
-	if err := fs.fms.SaveFileMeta(ctx, fm); err != nil {
+	dbCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+
+	if err := fs.fms.SaveFileMeta(dbCtx, fm); err != nil {
 		if rbErr := fs.DeleteFile(ctx, fm.ID, owner); rbErr != nil {
 			// TODO setup logger
 		}
