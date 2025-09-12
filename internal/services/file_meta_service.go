@@ -2,6 +2,8 @@ package services
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
@@ -49,7 +51,10 @@ func (fms *fileMetaService) LookupFileMetaByNameAndOwner(ctx context.Context, na
 	defer cancel()
 	fm, err := fms.db.GetFileMetaByNameAndOwner(dbCtx, name, owner)
 	if err != nil {
-		return nil, fmt.Errorf("[services.LookupFileMeta] failed to get file '%s' for user '%s': %w", name, owner, err)
+		if !errors.Is(err, sql.ErrNoRows) {
+			return nil, fmt.Errorf("[services.LookupFileMeta] failed to get file '%s' for user '%s': %w", name, owner, err)
+		}
+		return nil, err
 	}
 	return fm, nil
 }

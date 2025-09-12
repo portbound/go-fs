@@ -4,7 +4,10 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"log/slog"
 	"net/http"
+	"os"
+	"path/filepath"
 
 	"github.com/portbound/go-fs/internal/config"
 	"github.com/portbound/go-fs/internal/handlers"
@@ -21,6 +24,17 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to load config: %v", err)
 	}
+
+	errorLog, err := os.OpenFile(filepath.Join(cfg.LogDir, "error.log"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
+	if err != nil {
+		log.Fatal("failed to set up log file")
+	}
+	defer errorLog.Close()
+
+	jsonHandler := slog.NewJSONHandler(errorLog, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	})
+	logger := slog.New(jsonHandler)
 
 	db, err := setupDB(cfg.DBEngine, cfg.DBConnStr)
 	if err != nil {
@@ -45,7 +59,7 @@ func main() {
 	webHandler.RegisterRoutes(mux)
 
 	apiMux := http.NewServeMux()
-	apiHandler := handlers.NewAPIHandler(fileService, fileMetaService, userService)
+	apiHandler := handlers.NewAPIHandler(fileService, fileMetaService, userService, logger)
 	apiHandler.RegisterRoutes(apiMux)
 
 	mux.Handle("/", authMW.RequireWebAuth(http.FileServer(http.Dir("./web/public"))))
