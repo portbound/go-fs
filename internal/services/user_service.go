@@ -2,7 +2,6 @@ package services
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/portbound/go-fs/internal/models"
@@ -26,7 +25,7 @@ func (us *userService) LookupUser(ctx context.Context, email string) (*models.Us
 	defer cancel()
 	user, err := us.db.GetUser(dbCtx, email)
 	if err != nil {
-		return nil, fmt.Errorf("[services.GetUser] failed to get user info for email '%s': %w", email, err)
+		return nil, err
 	}
 	return user, nil
 }

@@ -9,8 +9,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"sync"
-	"time"
 
 	"github.com/portbound/go-fs/internal/models"
 	"github.com/portbound/go-fs/internal/repositories"
@@ -40,15 +38,15 @@ func NewFileService(storageRepo repositories.StorageRepository, fileMetaService 
 func (fs *fileService) ProcessFile(ctx context.Context, fm *models.FileMeta, owner *models.User) error {
 	_, err := fs.fms.LookupFileMetaByNameAndOwner(ctx, fm.Name, owner)
 	if err == nil {
-		return fmt.Errorf("[services.ProcessBatch] file %s already exists (skipping)", fm.Name)
+		return errors.New("file already exists")
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
-		return fmt.Errorf("[services.ProcessBatch] '%s': %w", fm.Name, err)
+		return err
 	}
 
 	thumbReader, err := GenerateThumbnail(ctx, fm)
 	if err != nil {
-		return fmt.Errorf("[services.ProcessBatch] failed to generate thumbnail for '%s': %w", fm.Name, err)
+		return fmt.Errorf("thumbnail generation failed: %w", err)
 	}
 
 	tfm := &models.FileMeta{
@@ -61,36 +59,38 @@ func (fs *fileService) ProcessFile(ctx context.Context, fm *models.FileMeta, own
 
 	tfm.Size, tfm.UploadDate, err = fs.storage.Upload(ctx, tfm.ID, owner.BucketName, thumbReader)
 	if err != nil {
-		return fmt.Errorf("[fileService.processFile] upload failed for %s: %w", fm.Name, err)
+		return fmt.Errorf("upload failed: %w", err)
 	}
 
 	if err := fs.fms.SaveFileMeta(ctx, tfm); err != nil {
-		if rbErr := fs.DeleteFile(ctx, tfm.ID, owner); rbErr != nil {
-			// TODO set up logger
-			return fmt.Errorf("CRITICAL %s: %w", fm.Name, rbErr)
+		rbErr := fs.DeleteFile(ctx, tfm.ID, owner)
+		if rbErr != nil {
+			err = errors.Join(err, fmt.Errorf("CRITICAL - failed to clean up orphaned file '%s': %w", tfm.ID, rbErr))
 		}
-		return fmt.Errorf("failed to save file meta for %s: %w", fm.Name, err)
+		return fmt.Errorf("failed to save file meta: %w", err)
 	}
 
 	fileReader, err := os.Open(fm.TmpFilePath)
 	if err != nil {
-		return fmt.Errorf("[services.ProcessBatch] failed to open %s: %w", fm.TmpFilePath, err)
+		return fmt.Errorf("failed to read file from disk: %w", err)
 	}
 	defer fileReader.Close()
 	defer os.Remove(fm.TmpFilePath)
 
 	fm.ThumbID = tfm.ID
 
+	// TODO we need to nuke the thumbnail if this fails :(
 	fm.Size, fm.UploadDate, err = fs.storage.Upload(ctx, fm.ID, owner.BucketName, thumbReader)
 	if err != nil {
-		return fmt.Errorf("[fileService.processFile] upload failed for %s: %w", fm.Name, err)
+		return fmt.Errorf("upload failed: %w", err)
 	}
 
 	if err := fs.fms.SaveFileMeta(ctx, fm); err != nil {
-		if rbErr := fs.DeleteFile(ctx, fm.ID, owner); rbErr != nil {
-			// TODO set up logger
-			return fmt.Errorf("CRITICAL %s: %w", fm.Name, rbErr)
+		rbErr := fs.DeleteFile(ctx, tfm.ID, owner)
+		if rbErr != nil {
+			err = errors.Join(err, fmt.Errorf("CRITICAL - failed to clean up orphaned file '%s': %w", tfm.ID, rbErr))
 		}
+		return fmt.Errorf("failed to save file meta: %w", err)
 	}
 
 	return nil
@@ -99,7 +99,7 @@ func (fs *fileService) ProcessFile(ctx context.Context, fm *models.FileMeta, own
 func (fs *fileService) DownloadFile(ctx context.Context, id string, owner *models.User) (io.ReadCloser, error) {
 	gcsReader, err := fs.storage.Download(ctx, id, owner.BucketName)
 	if err != nil {
-		return nil, fmt.Errorf("[services.GetFile] failed to get file from storage: %w", err)
+		return nil, err
 	}
 
 	return gcsReader, nil
@@ -107,7 +107,7 @@ func (fs *fileService) DownloadFile(ctx context.Context, id string, owner *model
 
 func (fs *fileService) DeleteFile(ctx context.Context, id string, owner *models.User) error {
 	if err := fs.storage.Delete(ctx, id, owner.BucketName); err != nil {
-		return fmt.Errorf("[services.DeleteFile] failed to delete %s from storage: %w", id, err)
+		return err
 	}
 	return nil
 }
@@ -120,12 +120,12 @@ func (fs *fileService) StageFileToDisk(ctx context.Context, fileName string, rea
 
 	path := fs.tmpDir
 	if err := os.MkdirAll(path, 0755); err != nil {
-		return "", 0, fmt.Errorf("[util.StageFileToDisk] failed to create storage dir at '%s': %w", path, err)
+		return "", 0, fmt.Errorf("failed to create tmp dir at '%s': %w", path, err)
 	}
 
 	file, err := os.Create(filepath.Join(path, fileName))
 	if err != nil {
-		return "", 0, fmt.Errorf("[util.StageFileToDisk] failed to create temp file: %w", err)
+		return "", 0, fmt.Errorf("failed to create tmp file for '%s': %w", fileName, err)
 	}
 	defer file.Close()
 
@@ -137,12 +137,12 @@ func (fs *fileService) StageFileToDisk(ctx context.Context, fileName string, rea
 
 	select {
 	case <-ctx.Done():
-		os.Remove(file.Name())
+		defer os.Remove(file.Name())
 		return "", 0, ctx.Err()
 	case result := <-ch:
 		if result.err != nil {
-			os.Remove(file.Name())
-			return "", 0, fmt.Errorf("[fileService.StageFileToDisk] failed to write to tmp file: %w", result.err)
+			defer os.Remove(file.Name())
+			return "", 0, err
 		}
 		return file.Name(), result.bytesWritten, nil
 	}

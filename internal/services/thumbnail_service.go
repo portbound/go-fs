@@ -3,9 +3,9 @@ package services
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"io"
 	"os/exec"
+	"time"
 
 	_ "image/gif"
 	_ "image/png"
@@ -24,11 +24,13 @@ func GenerateThumbnail(ctx context.Context, fm *models.FileMeta) (io.Reader, err
 		"-",
 	}
 
-	cmd := exec.CommandContext(ctx, "ffmpeg", args...)
+	ffmpegCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ffmpegCtx, "ffmpeg", args...)
 	cmd.Stdout = &buf
 
 	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf("[GenerateThumbnail] ffmpeg cmd failed: %w", err)
+		return nil, err
 	}
 
 	return &buf, nil

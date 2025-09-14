@@ -1,15 +1,21 @@
 package middleware
 
 import (
-	"log"
+	"log/slog"
 	"net/http"
-	"time"
 )
 
-func Logging(next http.Handler) http.Handler {
+type LoggingMiddleware struct {
+	logger *slog.Logger
+}
+
+func NewLoggingMiddleware(logger *slog.Logger) *LoggingMiddleware {
+	return &LoggingMiddleware{logger: logger}
+}
+
+func (mw *LoggingMiddleware) LogRequest(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		start := time.Now()
 		next.ServeHTTP(w, r)
-		log.Println(r.Method, r.URL.Path, time.Since(start))
+		mw.logger.Info(r.Method, "URI", r.RequestURI, "client", r.RemoteAddr)
 	})
 }

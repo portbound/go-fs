@@ -29,11 +29,11 @@ func (s *Storage) Upload(ctx context.Context, fileName string, bucketName string
 	_, err := bkt.Attrs(ctx)
 	if err != nil {
 		if !errors.Is(err, storage.ErrBucketNotExist) {
-			return 0, time.Time{}, fmt.Errorf("[gcs.Upload] failed to verify bucket attributes for %s: %w", bucketName, err)
+			return 0, time.Time{}, err
 		}
 
 		if err := bkt.Create(ctx, s.projectID, nil); err != nil {
-			return 0, time.Time{}, fmt.Errorf("[gcs.Upload] failed to create new bucket %s: %w", bucketName, err)
+			return 0, time.Time{}, err
 		}
 	}
 
@@ -44,16 +44,16 @@ func (s *Storage) Upload(ctx context.Context, fileName string, bucketName string
 	defer cancel()
 
 	if _, err := io.Copy(wc, src); err != nil {
-		return 0, time.Time{}, fmt.Errorf("[gcs.Upload] failed to copy file to writer: %w", err)
+		return 0, time.Time{}, err
 	}
 
 	if err := wc.Close(); err != nil {
-		return 0, time.Time{}, fmt.Errorf("[gcs.Upload] failed to commit upload: %w", err)
+		return 0, time.Time{}, err
 	}
 
 	attrs, err := obj.Attrs(ctx)
 	if err != nil {
-		return 0, time.Time{}, fmt.Errorf("[gcs.Upload] failed to get object attributes: %w", err)
+		return 0, time.Time{}, err
 	}
 
 	return attrs.Size, attrs.Created, nil
@@ -64,7 +64,7 @@ func (s *Storage) Download(ctx context.Context, fileName string, bucketName stri
 
 	r, err := obj.NewReader(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("[gcs.Get] failed to downlod file %s: %w", fileName, err)
+		return nil, err
 	}
 	return r, nil
 }
@@ -73,7 +73,7 @@ func (s *Storage) Delete(ctx context.Context, id string, bucketName string) erro
 	obj := s.client.Bucket(bucketName).Object(id)
 
 	if err := obj.Delete(ctx); err != nil {
-		return fmt.Errorf("[gcs.Delete] failed to delete %s: %w", id, err)
+		return err
 	}
 
 	return nil

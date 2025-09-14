@@ -4,7 +4,10 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"log/slog"
 	"net/http"
+	"os"
+	"path/filepath"
 
 	"github.com/portbound/go-fs/internal/config"
 	"github.com/portbound/go-fs/internal/handlers"
@@ -21,6 +24,21 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to load config: %v", err)
 	}
+
+	accessLog, err := os.OpenFile(filepath.Join(cfg.LogDir, "access.log"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
+	if err != nil {
+		log.Fatal("failed to set up access log")
+	}
+	defer accessLog.Close()
+
+	errorLog, err := os.OpenFile(filepath.Join(cfg.LogDir, "error.log"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
+	if err != nil {
+		log.Fatal("failed to set up error log")
+	}
+	defer errorLog.Close()
+
+	accessLogger := slog.New(slog.NewJSONHandler(accessLog, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	errorLogger := slog.New(slog.NewJSONHandler(errorLog, &slog.HandlerOptions{Level: slog.LevelInfo}))
 
 	db, err := setupDB(cfg.DBEngine, cfg.DBConnStr)
 	if err != nil {
@@ -39,13 +57,14 @@ func main() {
 
 	authenticator := auth.NewAuthenticator(cfg.JWTSecret, cfg.GoogleClientID)
 	authMW := middleware.NewAuthMiddleware(authenticator, userService)
+	loggingMW := middleware.NewLoggingMiddleware(accessLogger)
 
 	mux := http.NewServeMux()
-	webHandler := handlers.NewWebHandler(authenticator, userService)
+	webHandler := handlers.NewWebHandler(authenticator, userService, errorLogger)
 	webHandler.RegisterRoutes(mux)
 
 	apiMux := http.NewServeMux()
-	apiHandler := handlers.NewAPIHandler(fileService, fileMetaService, userService)
+	apiHandler := handlers.NewAPIHandler(fileService, fileMetaService, userService, errorLogger)
 	apiHandler.RegisterRoutes(apiMux)
 
 	mux.Handle("/", authMW.RequireWebAuth(http.FileServer(http.Dir("./web/public"))))
@@ -53,7 +72,7 @@ func main() {
 
 	server := http.Server{
 		Addr:    cfg.ServerPort,
-		Handler: mux,
+		Handler: loggingMW.LogRequest(mux),
 	}
 
 	log.Printf("starting server on port %s\n", cfg.ServerPort)
