@@ -43,10 +43,7 @@ func (h *APIHandler) RegisterRoutes(mux *http.ServeMux) {
 }
 
 func (h *APIHandler) handleUploadFile(w http.ResponseWriter, r *http.Request) {
-	var errs []error
-	var batch []*models.FileMeta
-
-	owner, ok := r.Context().Value(middleware.RequesterKey).(*models.User)
+	requester, ok := r.Context().Value(middleware.RequesterKey).(*models.User)
 	if !ok {
 		response.WriteJSONError(w, http.StatusUnauthorized, fmt.Sprintf("unauthorized: user is missing from request"))
 		return
@@ -58,6 +55,10 @@ func (h *APIHandler) handleUploadFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var batchErrs error
+	var wg sync.WaitGroup
+	ch := make(chan error)
+	logger := h.logger.With("handler", "handleUploadFile", "requester", requester.Email)
 	reader := multipart.NewReader(r.Body, params["boundary"])
 	for {
 		part, err := reader.NextPart()
@@ -68,51 +69,59 @@ func (h *APIHandler) handleUploadFile(w http.ResponseWriter, r *http.Request) {
 			response.WriteJSONError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
-		defer part.Close()
 
-		if part.FileName() != "" {
-			contentType := part.Header.Get("Content-Type")
-			metaType := strings.Split(contentType, "/")[0]
-			if metaType != "image" && metaType != "video" {
-				response.WriteJSONError(w, http.StatusBadRequest, fmt.Sprintf("file type not allowed: %s", metaType))
-				return
-			}
-			id := uuid.New().String()
-			path, _, err := h.fs.StageFileToDisk(r.Context(), id, part)
-			if err != nil {
-				errs = append(errs, fmt.Errorf("[handleUploadFile] failed to stage %s to disk (skipping): %v", part.FileName(), err))
-				continue
-			}
-			defer os.Remove(path)
-
-			batch = append(batch, &models.FileMeta{
-				ID:          id,
-				Name:        filepath.Base(part.FileName()),
-				ContentType: contentType,
-				Owner:       owner.Email,
-				TmpFilePath: path,
-			})
+		name := filepath.Base(part.FileName())
+		contentType := part.Header.Get("Content-Type")
+		metaType := strings.Split(contentType, "/")[0]
+		if metaType != "image" && metaType != "video" {
+			logger.Error("attempt to upload unsupported file type", "error", err, "id", "", "file_name", name)
+			batchErrs = errors.Join(batchErrs, fmt.Errorf("unsupported file type: '%s'", name))
+			continue
 		}
+
+		id := uuid.New().String()
+		path, _, err := h.fs.StageFileToDisk(r.Context(), id, part)
+		if err != nil {
+			logger.Error("failed to stage file to disk", "error", err, "id", id, "file_name", name)
+			batchErrs = errors.Join(batchErrs, fmt.Errorf("failed to upload file: '%s'", name))
+			continue
+		}
+		part.Close()
+
+		fm := models.FileMeta{
+			ID:          id,
+			Name:        name,
+			ContentType: contentType,
+			Owner:       requester.Email,
+			TmpFilePath: path,
+		}
+
+		wg.Go(func() {
+			if err := h.fs.ProcessFile(r.Context(), &fm, requester); err != nil {
+				logger.Error("file processing failed", "error", err, "id", id, "file_name", fm.Name)
+				select {
+				case ch <- fmt.Errorf("failed to upload file: '%s'", name):
+				case <-r.Context().Done():
+				}
+			}
+		})
 	}
 
-	batchErrs := h.fs.ProcessBatch(r.Context(), batch, owner)
+	go func() {
+		wg.Wait()
+		close(ch)
+	}()
+
+	for err := range ch {
+		batchErrs = errors.Join(batchErrs, err)
+	}
+
 	if batchErrs != nil {
-		errs = append(errs, batchErrs...)
-	}
-
-	if len(errs) > 0 {
-		var errMessages []string
-		errMessages = append(errMessages, fmt.Sprintf("failed to upload %d file(s)", len(errs)))
-		for _, err := range errs {
-			errMessages = append(errMessages, err.Error())
-		}
-		response.WriteJSON(w, http.StatusMultiStatus, errMessages)
+		err = errors.Join(err, batchErrs)
+		response.WriteJSON(w, http.StatusMultiStatus, err)
 		return
 	}
-	var fm []*models.FileMeta
-	for _, item := range batch {
-		fm = append(fm, item)
-	}
+
 	response.WriteJSON(w, http.StatusCreated, nil)
 }
 

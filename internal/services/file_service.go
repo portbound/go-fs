@@ -17,7 +17,7 @@ import (
 )
 
 type FileService interface {
-	ProcessBatch(ctx context.Context, batch []*models.FileMeta, user *models.User) []error
+	ProcessFile(ctx context.Context, fm *models.FileMeta, owner *models.User) error
 	DownloadFile(ctx context.Context, id string, owner *models.User) (io.ReadCloser, error)
 	DeleteFile(ctx context.Context, id string, owner *models.User) error
 	StageFileToDisk(ctx context.Context, fileName string, reader io.Reader) (string, int64, error)
@@ -37,84 +37,63 @@ func NewFileService(storageRepo repositories.StorageRepository, fileMetaService 
 	}
 }
 
-func (fs *fileService) ProcessBatch(ctx context.Context, batch []*models.FileMeta, owner *models.User) []error {
-	var wg sync.WaitGroup
-	var batchErrs []error
-
-	ch := make(chan error)
-	for _, fm := range batch {
-		wg.Go(func() {
-			dbCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
-			defer cancel()
-			_, err := fs.fms.LookupFileMetaByNameAndOwner(dbCtx, fm.Name, owner)
-			if err == nil {
-				ch <- fmt.Errorf("[services.ProcessBatch] file %s already exists (skipping)", fm.Name)
-				return
-			}
-			if !errors.Is(err, sql.ErrNoRows) {
-				ch <- fmt.Errorf("[services.ProcessBatch] '%s': %w", fm.Name, err)
-				return
-			}
-
-			thumbCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
-			defer cancel()
-			thumbReader, err := GenerateThumbnail(thumbCtx, fm)
-			if err != nil {
-				ch <- fmt.Errorf("[services.ProcessBatch] failed to generate thumbnail for '%s': %w", fm.Name, err)
-				return
-			}
-
-			thumbID := fmt.Sprintf("thumb-%s", fm.ID)
-			tfm := &models.FileMeta{
-				ID:          thumbID,
-				ParentID:    fm.ID,
-				ThumbID:     "",
-				Name:        fmt.Sprintf("thumb-%s", fm.Name),
-				ContentType: "image/jpeg",
-				Owner:       fm.Owner,
-			}
-
-			if err = fs.processFile(ctx, tfm, owner, thumbReader); err != nil {
-				ch <- fmt.Errorf("[services.ProcessBatch] failed to process thumbnail for %s: %w", fm.Name, err)
-				return
-			}
-
-			fm.ThumbID = thumbID
-			fileReader, err := os.Open(fm.TmpFilePath)
-			if err != nil {
-				ch <- fmt.Errorf("[services.ProcessBatch] failed to open %s: %w", fm.TmpFilePath, err)
-				return
-			}
-			defer fileReader.Close()
-
-			if err := fs.processFile(ctx, fm, owner, fileReader); err != nil {
-				if fm.ThumbID != "" {
-					if err = fs.DeleteFile(ctx, fm.ThumbID, owner); err != nil {
-						// TODO setup logger
-						ch <- fmt.Errorf("CRITICAL - [services.ProcessBatch] failed to delete orphaned thumbnail %s: %v", fm.ThumbID, err)
-					}
-				}
-				ch <- fmt.Errorf("[services.ProcessBatch] failed to process %s: %w", fm.Name, err)
-				return
-			}
-
-			// TODO setup logger
-			ch <- nil
-		})
+func (fs *fileService) ProcessFile(ctx context.Context, fm *models.FileMeta, owner *models.User) error {
+	_, err := fs.fms.LookupFileMetaByNameAndOwner(ctx, fm.Name, owner)
+	if err == nil {
+		return fmt.Errorf("[services.ProcessBatch] file %s already exists (skipping)", fm.Name)
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("[services.ProcessBatch] '%s': %w", fm.Name, err)
 	}
 
-	go func() {
-		wg.Wait()
-		close(ch)
-	}()
+	thumbReader, err := GenerateThumbnail(ctx, fm)
+	if err != nil {
+		return fmt.Errorf("[services.ProcessBatch] failed to generate thumbnail for '%s': %w", fm.Name, err)
+	}
 
-	for err := range ch {
-		if err != nil {
-			batchErrs = append(batchErrs, err)
+	tfm := &models.FileMeta{
+		ID:          fmt.Sprintf("thumb-%s", fm.ID),
+		ParentID:    fm.ID,
+		Name:        fmt.Sprintf("thumb-%s", fm.Name),
+		ContentType: "image/jpeg",
+		Owner:       fm.Owner,
+	}
+
+	tfm.Size, tfm.UploadDate, err = fs.storage.Upload(ctx, tfm.ID, owner.BucketName, thumbReader)
+	if err != nil {
+		return fmt.Errorf("[fileService.processFile] upload failed for %s: %w", fm.Name, err)
+	}
+
+	if err := fs.fms.SaveFileMeta(ctx, tfm); err != nil {
+		if rbErr := fs.DeleteFile(ctx, tfm.ID, owner); rbErr != nil {
+			// TODO set up logger
+			return fmt.Errorf("CRITICAL %s: %w", fm.Name, rbErr)
+		}
+		return fmt.Errorf("failed to save file meta for %s: %w", fm.Name, err)
+	}
+
+	fileReader, err := os.Open(fm.TmpFilePath)
+	if err != nil {
+		return fmt.Errorf("[services.ProcessBatch] failed to open %s: %w", fm.TmpFilePath, err)
+	}
+	defer fileReader.Close()
+	defer os.Remove(fm.TmpFilePath)
+
+	fm.ThumbID = tfm.ID
+
+	fm.Size, fm.UploadDate, err = fs.storage.Upload(ctx, fm.ID, owner.BucketName, thumbReader)
+	if err != nil {
+		return fmt.Errorf("[fileService.processFile] upload failed for %s: %w", fm.Name, err)
+	}
+
+	if err := fs.fms.SaveFileMeta(ctx, fm); err != nil {
+		if rbErr := fs.DeleteFile(ctx, fm.ID, owner); rbErr != nil {
+			// TODO set up logger
+			return fmt.Errorf("CRITICAL %s: %w", fm.Name, rbErr)
 		}
 	}
 
-	return batchErrs
+	return nil
 }
 
 func (fs *fileService) DownloadFile(ctx context.Context, id string, owner *models.User) (io.ReadCloser, error) {
@@ -167,26 +146,4 @@ func (fs *fileService) StageFileToDisk(ctx context.Context, fileName string, rea
 		}
 		return file.Name(), result.bytesWritten, nil
 	}
-}
-
-func (fs *fileService) processFile(ctx context.Context, fm *models.FileMeta, owner *models.User, src io.Reader) error {
-	var err error
-	fm.Size, fm.UploadDate, err = fs.storage.Upload(ctx, fm.ID, owner.BucketName, src)
-	if err != nil {
-		return fmt.Errorf("[fileService.processFile] upload failed for %s: %w", fm.Name, err)
-	}
-
-	dbCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
-	defer cancel()
-
-	if err := fs.fms.SaveFileMeta(dbCtx, fm); err != nil {
-		if rbErr := fs.DeleteFile(ctx, fm.ID, owner); rbErr != nil {
-			// TODO setup logger
-		}
-		return fmt.Errorf("[fileService.processFile] save metadata failed for %s: %w", fm.Name, err)
-	}
-
-	// TODO setup logger
-
-	return nil
 }
