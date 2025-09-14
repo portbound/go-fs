@@ -51,7 +51,7 @@ func (r *MockFileMetaRepository) GetAllFileMeta(ctx context.Context, owner *mode
 	return afm, nil
 }
 
-func (r *MockFileMetaRepository) DeleteFileMeta(ctx context.Context, id string) error {
+func (r *MockFileMetaRepository) DeleteFileMeta(ctx context.Context, id string, owner *models.User) error {
 	fm, ok := r.fileMeta[id]
 	if !ok {
 		return sql.ErrNoRows
@@ -265,7 +265,7 @@ func Test_fileMetaService_DeleteFileMeta(t *testing.T) {
 
 			fileMetaService := services.NewFileMetaService(mockFileMetaRepository)
 
-			gotErr := fileMetaService.DeleteFileMeta(context.Background(), tt.id)
+			gotErr := fileMetaService.DeleteFileMeta(context.Background(), tt.id, tt.mockOwner)
 			if gotErr != nil {
 				if !tt.wantErr {
 					t.Errorf("DeleteFileMeta() failed: %v", gotErr)

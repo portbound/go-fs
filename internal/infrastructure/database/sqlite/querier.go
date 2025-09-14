@@ -10,7 +10,7 @@ import (
 
 type Querier interface {
 	CreateFileMeta(ctx context.Context, arg CreateFileMetaParams) error
-	DeleteFileMeta(ctx context.Context, id string) error
+	DeleteFileMeta(ctx context.Context, arg DeleteFileMetaParams) error
 	GetAllFileMeta(ctx context.Context, owner string) ([]FileMetum, error)
 	GetFileMeta(ctx context.Context, arg GetFileMetaParams) (FileMetum, error)
 	GetFileMetaByNameAndOwner(ctx context.Context, arg GetFileMetaByNameAndOwnerParams) (FileMetum, error)

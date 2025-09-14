@@ -64,9 +64,13 @@ func (db *SQLiteDB) GetAllFileMeta(ctx context.Context, owner *models.User) ([]*
 	return files, nil
 }
 
-func (db *SQLiteDB) DeleteFileMeta(ctx context.Context, id string) error {
-	time.Sleep(7 * time.Second)
-	return db.Queries.DeleteFileMeta(ctx, id)
+func (db *SQLiteDB) DeleteFileMeta(ctx context.Context, id string, owner *models.User) error {
+	params := DeleteFileMetaParams{
+		ID:    id,
+		Owner: owner.Email,
+	}
+
+	return db.Queries.DeleteFileMeta(ctx, params)
 }
 
 func mapFileMeta(f FileMetum) (*models.FileMeta, error) {

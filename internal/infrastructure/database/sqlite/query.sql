@@ -26,4 +26,5 @@ ORDER BY upload_date;
 
 -- name: DeleteFileMeta :exec
 DELETE FROM file_meta 
-WHERE id = ?;
+WHERE id = ?
+AND owner = ?;

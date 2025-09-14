@@ -2,6 +2,8 @@ package services
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
@@ -14,7 +16,7 @@ type FileMetaService interface {
 	LookupFileMeta(ctx context.Context, id string, owner *models.User) (*models.FileMeta, error)
 	LookupFileMetaByNameAndOwner(ctx context.Context, name string, owner *models.User) (*models.FileMeta, error)
 	LookupAllFileMeta(ctx context.Context, owner *models.User) ([]*models.FileMeta, error)
-	DeleteFileMeta(ctx context.Context, id string) error
+	DeleteFileMeta(ctx context.Context, id string, owner *models.User) error
 }
 
 type fileMetaService struct {
@@ -26,7 +28,7 @@ func NewFileMetaService(fileRepo repositories.FileMetaRepository) FileMetaServic
 }
 
 func (fms *fileMetaService) SaveFileMeta(ctx context.Context, fm *models.FileMeta) error {
-	dbCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	dbCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
 	if err := fms.db.CreateFileMeta(dbCtx, fm); err != nil {
 		return fmt.Errorf("[services.SaveFileMeta] failed to save file metadata: %w", err)
@@ -35,7 +37,7 @@ func (fms *fileMetaService) SaveFileMeta(ctx context.Context, fm *models.FileMet
 }
 
 func (fms *fileMetaService) LookupFileMeta(ctx context.Context, id string, owner *models.User) (*models.FileMeta, error) {
-	dbCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	dbCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
 	fm, err := fms.db.GetFileMeta(dbCtx, id, owner)
 	if err != nil {
@@ -45,17 +47,20 @@ func (fms *fileMetaService) LookupFileMeta(ctx context.Context, id string, owner
 }
 
 func (fms *fileMetaService) LookupFileMetaByNameAndOwner(ctx context.Context, name string, owner *models.User) (*models.FileMeta, error) {
-	dbCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	dbCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
 	fm, err := fms.db.GetFileMetaByNameAndOwner(dbCtx, name, owner)
 	if err != nil {
-		return nil, fmt.Errorf("[services.LookupFileMeta] failed to get file '%s' for user '%s': %w", name, owner, err)
+		if !errors.Is(err, sql.ErrNoRows) {
+			return nil, fmt.Errorf("[services.LookupFileMeta] failed to get file '%s' for user '%s': %w", name, owner, err)
+		}
+		return nil, err
 	}
 	return fm, nil
 }
 
 func (fms *fileMetaService) LookupAllFileMeta(ctx context.Context, owner *models.User) ([]*models.FileMeta, error) {
-	dbCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	dbCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
 	data, err := fms.db.GetAllFileMeta(dbCtx, owner)
 	if err != nil {
@@ -71,10 +76,10 @@ func (fms *fileMetaService) LookupAllFileMeta(ctx context.Context, owner *models
 	return fm, nil
 }
 
-func (fms *fileMetaService) DeleteFileMeta(ctx context.Context, id string) error {
-	dbCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+func (fms *fileMetaService) DeleteFileMeta(ctx context.Context, id string, owner *models.User) error {
+	dbCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
-	if err := fms.db.DeleteFileMeta(dbCtx, id); err != nil {
+	if err := fms.db.DeleteFileMeta(dbCtx, id, owner); err != nil {
 		return fmt.Errorf("[services.DeleteFileMeta] failed to delete file metadata: %w", err)
 	}
 	return nil

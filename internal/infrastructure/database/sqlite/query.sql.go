@@ -46,10 +46,16 @@ func (q *Queries) CreateFileMeta(ctx context.Context, arg CreateFileMetaParams) 
 const deleteFileMeta = `-- name: DeleteFileMeta :exec
 DELETE FROM file_meta 
 WHERE id = ?
+AND owner = ?
 `
 
-func (q *Queries) DeleteFileMeta(ctx context.Context, id string) error {
-	_, err := q.exec(ctx, q.deleteFileMetaStmt, deleteFileMeta, id)
+type DeleteFileMetaParams struct {
+	ID    string `json:"id"`
+	Owner string `json:"owner"`
+}
+
+func (q *Queries) DeleteFileMeta(ctx context.Context, arg DeleteFileMetaParams) error {
+	_, err := q.exec(ctx, q.deleteFileMetaStmt, deleteFileMeta, arg.ID, arg.Owner)
 	return err
 }
 
