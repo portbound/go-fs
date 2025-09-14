@@ -80,15 +80,15 @@ func (fs *fileService) ProcessFile(ctx context.Context, fm *models.FileMeta, own
 	fm.ThumbID = tfm.ID
 
 	// TODO we need to nuke the thumbnail if this fails :(
-	fm.Size, fm.UploadDate, err = fs.storage.Upload(ctx, fm.ID, owner.BucketName, thumbReader)
+	fm.Size, fm.UploadDate, err = fs.storage.Upload(ctx, fm.ID, owner.BucketName, fileReader)
 	if err != nil {
 		return fmt.Errorf("upload failed: %w", err)
 	}
 
 	if err := fs.fms.SaveFileMeta(ctx, fm); err != nil {
-		rbErr := fs.DeleteFile(ctx, tfm.ID, owner)
+		rbErr := fs.DeleteFile(ctx, fm.ID, owner)
 		if rbErr != nil {
-			err = errors.Join(err, fmt.Errorf("CRITICAL - failed to clean up orphaned file '%s': %w", tfm.ID, rbErr))
+			err = errors.Join(err, fmt.Errorf("CRITICAL - failed to clean up orphaned file '%s': %w", fm.ID, rbErr))
 		}
 		return fmt.Errorf("failed to save file meta: %w", err)
 	}
