@@ -2,7 +2,6 @@ package auth
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"time"
 
@@ -13,10 +12,11 @@ import (
 type Authenticator struct {
 	jwtSecret      string
 	googleClientID string
+	environment    string
 }
 
-func NewAuthenticator(jwtSecret string, googleClientID string) *Authenticator {
-	return &Authenticator{jwtSecret: jwtSecret, googleClientID: googleClientID}
+func NewAuthenticator(jwtSecret string, googleClientID string, environment string) *Authenticator {
+	return &Authenticator{jwtSecret: jwtSecret, googleClientID: googleClientID, environment: environment}
 }
 
 func (a *Authenticator) GenerateJWT(expirationDate time.Time, subject string) (string, error) {
@@ -29,7 +29,7 @@ func (a *Authenticator) GenerateJWT(expirationDate time.Time, subject string) (s
 
 	signedToken, err := token.SignedString([]byte(a.jwtSecret))
 	if err != nil {
-		return "", fmt.Errorf("[auth.GenerateJWT] failed to sign token: %w", err)
+		return "", err
 	}
 
 	return signedToken, nil
@@ -38,20 +38,24 @@ func (a *Authenticator) GenerateJWT(expirationDate time.Time, subject string) (s
 func (a *Authenticator) ValidateJWT(tokenString string) (*jwt.Token, error) {
 	token, err := jwt.ParseWithClaims(tokenString, &jwt.RegisteredClaims{}, func(t *jwt.Token) (any, error) { return []byte(a.jwtSecret), nil })
 	if err != nil {
-		return nil, fmt.Errorf("[auth.ValidateJWT] failed to parse claims: %w", err)
+		return nil, err
 	}
 
 	return token, nil
 }
 
 func (a *Authenticator) GenerateCookie(expirationDate time.Time, jwt string) *http.Cookie {
+	var isDevelopment bool
+	if a.environment == "development" {
+		isDevelopment = true
+	}
 	return &http.Cookie{
 		Name:     "gofs_session",
 		Value:    jwt,
 		Path:     "/",
 		MaxAge:   int(time.Until(expirationDate)),
 		HttpOnly: true,
-		Secure:   false, //TODO: Set to false for local HTTP development
+		Secure:   isDevelopment,
 		SameSite: http.SameSiteLaxMode,
 	}
 }
@@ -62,18 +66,18 @@ func (a *Authenticator) ValidateOAuth(idToken string) (string, error) {
 
 	validator, err := idtoken.NewValidator(ctx)
 	if err != nil {
-		return "", fmt.Errorf("[auth.ValidateOAuth] failed: %w", err)
+		return "", err
 	}
 
 	payload, err := validator.Validate(ctx, idToken, a.googleClientID)
 	if err != nil {
-		return "", fmt.Errorf("[auth.ValidateOAuth] failed: %w", err)
+		return "", err
 	}
 
 	data := payload.Claims["email"]
 	email, ok := data.(string)
 	if !ok {
-		return "", fmt.Errorf("[auth.ValidateOAuth] failed: %w", err)
+		return "", err
 	}
 
 	return email, nil

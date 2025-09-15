@@ -10,6 +10,7 @@ import (
 
 type Config struct {
 	ServerPort      string `envconfig:"SERVER_PORT" required:"true"`
+	Environment     string `envconfig:"ENVIRONMENT" required:"true"`
 	DBConnStr       string `envconfig:"DB_CONNECTION_STRING" required:"true"`
 	DBEngine        string `envconfig:"DB_ENGINE" required:"true"`
 	StorageProvider string `envconfig:"STORAGE_PROVIDER" required:"true"`
