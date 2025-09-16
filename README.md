@@ -20,6 +20,7 @@ Also just trying to learn new things.
 ## Technologies Used
 
 Go-FS is built with a modern stack, combining the power of Go on the backend with a lightweight and responsive frontend. 
+![hey_not_bad](https://github.com/portbound/go-fs/blob/main/Screenshot%20From%202025-09-16%2015-49-36.png)
 
 ### Backend
 
