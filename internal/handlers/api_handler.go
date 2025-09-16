@@ -239,11 +239,9 @@ func (h *APIHandler) handleDeleteFile(w http.ResponseWriter, r *http.Request) {
 
 	var errs error
 	// TODO need to come up with a less brittle implementation to call here using the saga pattern or some sort of transaction
+	// For now I think it makes the most sense to simply delete everything on GCS first, and then if both files succeed we can remove file meta... That way we don't end up with orphaned files on GCS and no track record of them in the DB if the call to GCS fails
+	// Still super brittle but better for development I guess
 	if err := h.fs.DeleteFile(r.Context(), fm.ThumbID, requester); err != nil {
-		errs = errors.Join(errs, err)
-	}
-
-	if err := h.fms.DeleteFileMeta(r.Context(), fm.ThumbID, requester); err != nil {
 		errs = errors.Join(errs, err)
 	}
 
@@ -251,8 +249,14 @@ func (h *APIHandler) handleDeleteFile(w http.ResponseWriter, r *http.Request) {
 		errs = errors.Join(errs, err)
 	}
 
-	if err := h.fms.DeleteFileMeta(r.Context(), fm.ID, requester); err != nil {
-		errs = errors.Join(errs, err)
+	if errs == nil {
+		if err := h.fms.DeleteFileMeta(r.Context(), fm.ThumbID, requester); err != nil {
+			errs = errors.Join(errs, err)
+		}
+
+		if err := h.fms.DeleteFileMeta(r.Context(), fm.ID, requester); err != nil {
+			errs = errors.Join(errs, err)
+		}
 	}
 
 	if errs != nil {
