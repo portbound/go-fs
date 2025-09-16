@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"sync"
 	"time"
 
 	"cloud.google.com/go/storage"
@@ -13,6 +14,7 @@ import (
 type Storage struct {
 	client    *storage.Client
 	projectID string
+	mu        sync.Mutex
 }
 
 func NewStorage(ctx context.Context, projectID string) (*Storage, error) {
@@ -20,36 +22,34 @@ func NewStorage(ctx context.Context, projectID string) (*Storage, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Storage{client: client, projectID: projectID}, nil
+	return &Storage{client: client, projectID: projectID, mu: sync.Mutex{}}, nil
 }
 
 func (s *Storage) Upload(ctx context.Context, fileName string, bucketName string, src io.Reader) (int64, time.Time, error) {
 	bkt := s.client.Bucket(bucketName)
+	s.mu.Lock()
 	_, err := bkt.Attrs(ctx)
 	if err != nil {
 		if !errors.Is(err, storage.ErrBucketNotExist) {
+			s.mu.Unlock()
 			return 0, time.Time{}, err
 		}
 
-		// BUG: if a user does not have a bucket yet, and they try to upload several attachments, a race condition will occur since we're handling uploads concurrently. The first go routine to reach this method will start creating the bucket. If the other go routines are fast enough, they'll reach this logic before the bucket has been created, so the bkt.Attrs() check fails, but slow enough that they will get a conflict if they try to create the bucket themselves.
+		attrs := &storage.BucketAttrs{
+			UniformBucketLevelAccess: storage.UniformBucketLevelAccess{
+				Enabled: true,
+			},
+			PublicAccessPrevention: 1,
+			Location:               "us-east4",
+			LocationType:           "Region",
+		}
 
-		// I guess we'll either A. need to create the bucket ourselves when we create the user, or B. create it somewhere earlier in the pipeline.
-
-		// We could always look into a proper sign up process and see if there's a way to maybe send magic links? idk
-
-		// attrs := &storage.BucketAttrs{
-		// 	UniformBucketLevelAccess: storage.UniformBucketLevelAccess{
-		// 		Enabled: true,
-		// 	},
-		// 	PublicAccessPrevention: 1,
-		// 	Location:               "us-east4",
-		// 	LocationType:           "Region",
-		// }
-		//
-		// if err := bkt.Create(ctx, s.projectID, attrs); err != nil {
-		// 	return 0, time.Time{}, err
-		// }
+		if err := bkt.Create(ctx, s.projectID, attrs); err != nil {
+			s.mu.Unlock()
+			return 0, time.Time{}, err
+		}
 	}
+	s.mu.Unlock()
 
 	obj := s.client.Bucket(bucketName).Object(fileName)
 	wc := obj.NewWriter(ctx)
