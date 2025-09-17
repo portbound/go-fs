@@ -1,255 +1,268 @@
-document.addEventListener('alpine:init', () => {
-  Alpine.data('fileManager', () => ({
-    files: {},
-    selectedFile: {},
-    showPopover: false,
-    showFullscreenImage: false,
-    fullscreenImageUrl: '',
-    isLoading: true,
-    showUploadModal: false,
-    isUploading: false,
-    filesToUpload: [],
+document.addEventListener("alpine:init", () => {
+	Alpine.data("galleryApp", () => ({
+		// --- STATE ---
+		filesByDate: {},
+		selectedFile: null,
+		isLoading: true,
+		// Modals
+		showPopover: false,
+		showFullscreenImage: false,
+		fullscreenImageUrl: "",
+		showUploadModal: false,
+		showNotifications: false,
+		// Uploads
+		isUploading: false,
+		filesToUpload: [],
+		// Toasts & Notifications
+		toasts: [],
+		notifications: [],
+		toastIdCounter: 0,
+		notificationIdCounter: 0,
 
-    // A reusable fetch wrapper to add the Authorization header.
-    async authedFetch(url, options = {}) {
-      const token = localStorage.getItem("jwt");
-      if (!token) {
-        // Redirect to login if no token is found
-        window.location.href = '/login.html';
-        return;
-      }
+		// --- METHODS ---
 
-      const headers = {
-        ...options.headers,
-        'Authorization': `Bearer ${token}`,
-      };
+		// Initialization
+		init() {
+			if (!localStorage.getItem("jwt")) {
+				window.location.href = "/login.html";
+				return;
+			}
+			this.fetchFiles();
+		},
 
-      const response = await fetch(url, { ...options, headers });
+		// API Fetch Wrapper
+		async authedFetch(url, options = {}) {
+			const token = localStorage.getItem("jwt");
+			if (!token) {
+				this.addToast("Authentication token not found. Redirecting to login.");
+				setTimeout(() => (window.location.href = "/login.html"), 2000);
+				return Promise.reject(new Error("Unauthorized"));
+			}
 
-      if (response.status === 401) {
-        // Token is invalid or expired, redirect to login
-        localStorage.removeItem("jwt");
-        window.location.href = '/login.html';
-        throw new Error('Unauthorized');
-      }
+			const headers = {
+				...options.headers,
+				Authorization: `Bearer ${token}`,
+			};
 
-      return response;
-    },
+			try {
+				const response = await fetch(`/api${url}`, { ...options, headers });
+				if (response.status === 401) {
+					localStorage.removeItem("jwt");
+					this.addToast("Session expired. Redirecting to login.");
+					setTimeout(() => (window.location.href = "/login.html"), 2000);
+					return Promise.reject(new Error("Unauthorized"));
+				}
+				return response;
+			} catch (error) {
+				this.addToast("Network error. Please check your connection.");
+				return Promise.reject(error);
+			}
+		},
 
-    init() {
-      this.fetchFiles();
-    },
+		// Data Fetching & Processing
+		async fetchFiles() {
+			this.isLoading = true;
+			try {
+				const response = await this.authedFetch("/files");
+				if (!response.ok) throw new Error("Failed to fetch files.");
 
-    groupFilesByDate(files) {
-      const grouped = {};
-      files.forEach(file => {
-        const date = new Date(file['uploadDate']).toISOString().split('T')[0]; // Format as YYYY-MM-DD
-        if (!grouped[date]) {
-          grouped[date] = [];
-        }
-        // Add placeholder properties for our blob URLs
-        file.thumbnailUrl = '';
-        file.fullUrl = '';
-        grouped[date].push(file);
-      });
-      return grouped;
-    },
+				const data = (await response.json()) || [];
+				if (Array.isArray(data)) {
+					this.filesByDate = this.groupFilesByDate(data);
+					Object.values(this.filesByDate)
+						.flat()
+						.forEach((file) => this.loadThumbnail(file));
+				}
+			} catch (error) {
+				if (error.message !== "Unauthorized") {
+					this.addToast("Error fetching files: " + error.message);
+				}
+			} finally {
+				this.isLoading = false;
+			}
+		},
 
-    get sortedDates() {
-      return Object.keys(this.files).sort((a, b) => b.localeCompare(a));
-    },
+		groupFilesByDate(files) {
+			return files.reduce((acc, file) => {
+				const uploadDate = new Date(file.uploadDate); // This Date object represents the UTC instant
+				// Format this Date object to a local YYYY-MM-DD string for grouping
+				const date = uploadDate.toLocaleDateString('en-CA', { // 'en-CA' locale ensures YYYY-MM-DD format
+					year: 'numeric',
+					month: '2-digit',
+					day: '2-digit'
+				});
 
-    formatDate(dateString) {
-      const date = new Date(dateString);
-      const options = { year: 'numeric', month: 'long', day: 'numeric' };
-      return date.toLocaleDateString(undefined, options);
-    },
+				if (!acc[date]) acc[date] = [];
+				file.thumbnailUrl = ""; // Placeholder
+				file.fullUrl = ""; // Placeholder
+				acc[date].push(file);
+				return acc;
+			}, {});
+		},
 
-    async loadThumbnail(file) {
-      if (file.thumbnailUrl) return; // Already loaded
-      try {
-        const response = await this.authedFetch(`/api/files/${file.thumbId}`);
-        if (!response.ok) throw new Error('Failed to fetch thumbnail');
-        const blob = await response.blob();
-        file.thumbnailUrl = URL.createObjectURL(blob);
-      } catch (error) {
-        console.error(`Error loading thumbnail for ${file.name}:`, error);
-        // You could set a default broken image URL here
-      }
-    },
+		async loadThumbnail(file) {
+			if (file.thumbnailUrl) return;
+			try {
+				const response = await this.authedFetch(`/files/${file.thumbId}`);
+				if (!response.ok) throw new Error("Thumbnail fetch failed");
+				const blob = await response.blob();
+				file.thumbnailUrl = URL.createObjectURL(blob);
+			} catch (error) {
+				console.error(`Failed to load thumbnail for ${file.name}:`, error);
+				this.addToast(`Could not load thumbnail for ${file.name}`);
+			}
+		},
 
-    fetchFiles() {
-      this.isLoading = true;
-      this.authedFetch('/api/files')
-        .then(response => {
-          if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-          }
-          return response.json();
-        })
-        .then(data => {
-          if (Array.isArray(data)) {
-            this.files = this.groupFilesByDate(data);
-            // Asynchronously load thumbnails after files are grouped
-            Object.values(this.files).flat().forEach(file => this.loadThumbnail(file));
-          } else {
-            this.files = {};
-            if (data) {
-              console.error("API did not return an array:", data);
-            }
-          }
-        })
-        .catch(error => {
-          console.error('Error fetching files:', error);
-          if (error.message !== 'Unauthorized') {
-            alert('Failed to fetch files. Check the console for more details.');
-          }
-        })
-        .finally(() => {
-          this.isLoading = false;
-        });
-    },
+		// UI Handlers
+		async handleFileClick(file) {
+			this.selectedFile = file;
+			this.showPopover = true;
 
-    async handleFileClick(file) {
-      this.selectedFile = file;
-      this.showPopover = true;
+			if (!file.fullUrl) {
+				try {
+					const response = await this.authedFetch(`/files/${file.id}`);
+					if (!response.ok) throw new Error("Full media fetch failed");
+					const blob = await response.blob();
+					this.selectedFile.fullUrl = URL.createObjectURL(blob);
+				} catch (error) {
+					this.addToast(`Could not load preview for ${file.name}`);
+				}
+			}
+		},
 
-      // Load the full-resolution image/video if it hasn't been loaded yet
-      if (!this.selectedFile.fullUrl && (this.selectedFile.type?.startsWith('image/') || this.selectedFile.type?.startsWith('video/'))) {
-        try {
-          const response = await this.authedFetch(`/api/files/${this.selectedFile.id}`);
-          if (!response.ok) throw new Error('Failed to fetch full media');
-          const blob = await response.blob();
-          this.selectedFile.fullUrl = URL.createObjectURL(blob);
-        } catch (error) {
-          console.error(`Error loading full media for ${this.selectedFile.name}:`, error);
-          alert('Could not load media preview.');
-        }
-      }
-    },
+		openFullscreen() {
+			if (this.selectedFile?.type.startsWith("image/")) {
+				this.fullscreenImageUrl = this.selectedFile.fullUrl;
+				this.showFullscreenImage = true;
+			}
+		},
 
-    openFullscreen() {
-      if (this.selectedFile && this.selectedFile.type.startsWith('image/')) {
-        this.fullscreenImageUrl = this.selectedFile.fullUrl;
-        this.showFullscreenImage = true;
-        this.showPopover = false;
-      }
-    },
+		logout() {
+			localStorage.removeItem("jwt");
+			this.addToast("You have been logged out.", "success");
+			setTimeout(() => (window.location.href = "/login.html"), 1000);
+		},
 
-    async downloadFile(id) {
-      try {
-        const response = await this.authedFetch(`/api/files/${id}`, { method: 'GET' });
-        if (!response.ok) {
-          throw new Error(`Failed to download file: ${response.statusText}`);
-        }
+		// File Actions
+		async downloadFile(file) {
+			try {
+				const response = await this.authedFetch(`/files/${file.id}`);
+				if (!response.ok) throw new Error(`Server error: ${response.statusText}`);
 
-        const blob = await response.blob();
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.style.display = 'none';
-        a.href = url;
-        // Use the selectedFile.name for the download attribute
-        a.download = this.selectedFile.name || `download_${id}`;
-        document.body.appendChild(a);
-        a.click();
-        window.URL.revokeObjectURL(url);
-        document.body.removeChild(a);
-      } catch (error) {
-        console.error('Error downloading file:', error);
-        alert(error.message);
-      }
-    },
+				const blob = await response.blob();
+				const url = window.URL.createObjectURL(blob);
+				const a = document.createElement("a");
+				a.style.display = "none";
+				a.href = url;
+				a.download = file.name;
+				document.body.appendChild(a);
+				a.click();
+				window.URL.revokeObjectURL(url);
+				document.body.removeChild(a);
+			} catch (error) {
+				this.addToast(`Download failed: ${error.message}`);
+			}
+		},
 
-    deleteFile(id) {
-      if (!confirm('Are you sure you want to delete this file?')) {
-        return;
-      }
+		async deleteFile(file) {
+			if (!confirm("Are you sure you want to delete this file? This action cannot be undone.")) return;
 
-      this.authedFetch(`/api/files/${id}`, { method: 'DELETE' })
-        .then(response => {
-          if (response.ok) {
-            // Find and remove the file from the nested structure
-            for (const date in this.files) {
-              this.files[date] = this.files[date].filter(f => f.id !== id);
-              if (this.files[date].length === 0) {
-                delete this.files[date];
-              }
-            }
-            this.showPopover = false;
-            this.selectedFile = {};
-          } else {
-            throw new Error('Failed to delete file.');
-          }
-        })
-        .catch(error => {
-          console.error('Error deleting file:', error);
-          alert(error.message);
-        });
-    },
+			try {
+				const response = await this.authedFetch(`/files/${file.id}`, { method: "DELETE" });
+				if (!response.ok) throw new Error("Failed to delete file.");
 
-    handleFileSelect(event) {
-      this.filesToUpload = Array.from(event.target.files);
-    },
+				// Remove from view
+				for (const date in this.filesByDate) {
+					this.filesByDate[date] = this.filesByDate[date].filter((f) => f.id !== file.id);
+					if (this.filesByDate[date].length === 0) {
+						delete this.filesByDate[date];
+					}
+				}
+				this.showPopover = false;
+				this.selectedFile = null;
+				this.addToast(`"${file.name}" deleted successfully.`, "success");
+			} catch (error) {
+				this.addToast(error.message);
+			}
+		},
 
-    handleDrop(event) {
-      this.filesToUpload = Array.from(event.dataTransfer.files);
-    },
+		// Upload Logic
+		handleFileSelect(event) {
+			this.filesToUpload = Array.from(event.target.files);
+		},
+		handleDrop(event) {
+			this.filesToUpload = Array.from(event.dataTransfer.files);
+		},
+		async uploadFiles() {
+			if (this.filesToUpload.length === 0) return;
 
+			this.isUploading = true;
+			const formData = new FormData();
+			this.filesToUpload.forEach((file) => formData.append("files", file));
 
+			try {
+				const response = await this.authedFetch("/files", {
+					method: "POST",
+					body: formData,
+				});
 
-    uploadFiles() {
-      if (this.filesToUpload.length === 0) {
-        return;
-      }
+				if (response.status === 201) {
+					const message = this.filesToUpload.length === 1 
+						? `"${this.filesToUpload[0].name}" uploaded successfully!` 
+						: `${this.filesToUpload.length} files uploaded successfully!`;
+					this.addToast(message, "success");
+				} else if (response.status === 207) {
+					// Multi-Status
+					const errorText = await response.text();
+					this.addToast(`Some files failed to upload: ${errorText}`);
+				} else {
+					const errorData = await response.json();
+					throw new Error(errorData.error || "Upload failed");
+				}
 
-      this.isUploading = true;
-      const formData = new FormData();
-      this.filesToUpload.forEach(file => {
-        formData.append('file', file);
-      });
+				this.showUploadModal = false;
+				this.filesToUpload = [];
+				this.fetchFiles();
+			} catch (error) {
+				this.addToast(error.message);
+			} finally {
+				this.isUploading = false;
+			}
+		},
 
-      this.authedFetch('/api/files', {
-        method: 'POST',
-        body: formData,
-      })
-        .then(response => {
-          if (response.status === 201) {
-            return null; // Success with no content to parse
-          }
-          // For other statuses, try to parse error json
-          return response.json().then(data => {
-            let errorMessage = 'Upload failed.';
-            if (response.status === 207) { // Multi-Status
-              errorMessage = data.join('\n');
-            } else if (data && data.error) {
-              errorMessage = data.error;
-            } else if (Array.isArray(data)) {
-              errorMessage = data.join('\n');
-            }
-            throw new Error(errorMessage);
-          });
-        })
-        .then(() => {
-          this.showUploadModal = false;
-          this.filesToUpload = [];
-          this.fetchFiles(); // Refresh file list
-        })
-        .catch(error => {
-          console.error('Error uploading files:', error);
-          alert(`Upload failed: ${error.message}`);
-        })
-        .finally(() => {
-          this.isUploading = false;
-        });
-    },
+		// Toasts & Notifications
+		addToast(message, type = "error", duration = 5000) {
+			const id = this.toastIdCounter++;
+			this.toasts.push({ id, message, type });
+			this.addNotification(message, type);
+			setTimeout(() => this.dismissToast(id), duration);
+		},
+		dismissToast(id) {
+			this.toasts = this.toasts.filter((t) => t.id !== id);
+		},
+		addNotification(message, type) {
+			const id = this.notificationIdCounter++;
+			this.notifications.unshift({ id, message, type });
+		},
 
-    formatBytes(bytes, decimals = 2) {
-      if (!bytes || bytes === 0) return '0 Bytes';
-      const k = 1024;
-      const dm = decimals < 0 ? 0 : decimals;
-      const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
-      const i = Math.floor(Math.log(bytes) / Math.log(k));
-      return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
-    }
-  }));
+		// --- GETTERS & HELPERS ---
+		get sortedDates() {
+			return Object.keys(this.filesByDate).sort((a, b) => b.localeCompare(a));
+		},
+		formatDate(dateString) {
+			return new Date(dateString).toLocaleDateString(undefined, {
+				year: "numeric",
+				month: "long",
+				day: "numeric",
+			});
+		},
+		formatBytes(bytes, decimals = 2) {
+			if (!+bytes) return "0 Bytes";
+			const k = 1024;
+			const dm = decimals < 0 ? 0 : decimals;
+			const sizes = ["Bytes", "KB", "MB", "GB", "TB"];
+			const i = Math.floor(Math.log(bytes) / Math.log(k));
+			return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
+		},
+	}));
 });

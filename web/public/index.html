@@ -21,7 +21,26 @@
     </style>
   </head>
   <body class="bg-gray-900 text-white font-sans">
-    <div x-data="fileManager" x-cloak class="container mx-auto px-4 py-8">
+    <div x-data="galleryApp()" x-cloak class="container mx-auto px-4 py-8">
+      <!-- Toasts -->
+      <div
+        x-show="toasts.length > 0"
+        class="fixed top-5 right-5 z-[100] w-80 space-y-3"
+      >
+        <template x-for="toast in toasts" :key="toast.id">
+          <div
+            @click="dismissToast(toast.id)"
+            class="relative w-full cursor-pointer rounded-md border px-4 py-3 shadow-lg"
+            :class="{
+            'bg-red-500 border-red-700 text-white': toast.type === 'error',
+            'bg-green-500 border-green-700 text-white': toast.type === 'success'
+        }"
+          >
+            <p x-text="toast.message"></p>
+          </div>
+        </template>
+      </div>
+
       <!-- Navbar -->
       <nav class="bg-gray-800 rounded-lg shadow-lg mb-8">
         <div class="mx-auto max-w-7xl px-4">
@@ -30,7 +49,7 @@
               <i class="fas fa-folder-open text-2xl text-indigo-400 mr-3"></i>
               <span class="text-xl font-bold">go-fs</span>
             </div>
-            <div class="flex items-center">
+            <div class="flex items-center space-x-4">
               <button
                 @click="showUploadModal = true"
                 class="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg flex items-center transition-colors"
@@ -38,10 +57,52 @@
                 <i class="fas fa-upload mr-2"></i>
                 <span>Upload</span>
               </button>
+              <div class="relative">
+                <button
+                  @click="showNotifications = !showNotifications"
+                  class="text-gray-300 hover:text-white"
+                >
+                  <i class="fas fa-bell text-xl"></i>
+                  <span
+                    x-show="notifications.length > 0"
+                    class="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-xs"
+                    x-text="notifications.length"
+                  ></span>
+                </button>
+              </div>
+              <button @click="logout()" class="text-gray-300 hover:text-white">
+                <i class="fas fa-sign-out-alt text-xl"></i>
+              </button>
             </div>
           </div>
         </div>
       </nav>
+
+      <!-- Notifications Dropdown -->
+      <div
+        x-show="showNotifications"
+        @click.away="showNotifications = false"
+        class="absolute top-20 right-8 w-80 bg-gray-800 rounded-lg shadow-xl z-50 border border-gray-700"
+        x-transition
+      >
+        <div class="p-4 border-b border-gray-700">
+          <h3 class="font-bold">Notifications</h3>
+        </div>
+        <div class="p-4 max-h-80 overflow-y-auto">
+          <template x-if="notifications.length === 0">
+            <p class="text-gray-400">No new notifications.</p>
+          </template>
+          <template
+            x-for="notification in notifications"
+            :key="notification.id"
+          >
+            <div
+              class="py-2 border-b border-gray-700/50 text-sm"
+              x-text="notification.message"
+            ></div>
+          </template>
+        </div>
+      </div>
 
       <!-- Loading indicator -->
       <div x-show="isLoading" class="text-center py-16">
@@ -50,17 +111,17 @@
       </div>
 
       <!-- File Grid -->
-      <div x-show="!isLoading && Object.keys(files).length > 0">
-        <template x-for="(date, index) in sortedDates" :key="index">
+      <div x-show="!isLoading && Object.keys(filesByDate).length > 0">
+        <template x-for="date in sortedDates" :key="date">
           <div>
             <h2
               class="text-xl font-bold text-gray-300 mt-8 mb-4"
               x-text="formatDate(date)"
             ></h2>
             <div
-              class="grid grid-cols-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4"
+              class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4"
             >
-              <template x-for="file in files[date]" :key="file.id">
+              <template x-for="file in filesByDate[date]" :key="file.id">
                 <div
                   @click="handleFileClick(file)"
                   class="relative aspect-square bg-gray-800 rounded-lg overflow-hidden cursor-pointer group hover:shadow-lg hover:shadow-indigo-500/20 transition-shadow duration-300"
@@ -70,6 +131,12 @@
                     :alt="`Thumbnail for ${file.name}`"
                     class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
                   />
+                  <div
+                    x-show="file.type.startsWith('video/')"
+                    class="absolute inset-0 flex items-center justify-center bg-black bg-opacity-20"
+                  >
+                    <i class="fas fa-play text-white text-3xl opacity-70"></i>
+                  </div>
                   <div
                     class="absolute inset-0 bg-black bg-opacity-50 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end p-2"
                   >
@@ -87,7 +154,7 @@
 
       <!-- Empty state -->
       <div
-        x-show="!isLoading && Object.keys(files).length === 0"
+        x-show="!isLoading && Object.keys(filesByDate).length === 0"
         class="text-center py-16 bg-gray-800 rounded-lg"
       >
         <i class="fas fa-box-open text-4xl text-gray-500"></i>
@@ -103,9 +170,10 @@
       >
         <div
           @click.away="showPopover = false"
-          class="bg-gray-800 rounded-lg shadow-xl max-w-3xl w-full max-h-full overflow-y-auto"
+          class="bg-gray-800 rounded-lg shadow-xl max-w-4xl w-full max-h-full overflow-y-auto"
         >
-          <div class="p-6">
+          <template x-if="selectedFile">
+            <div class="p-6">
             <div class="flex justify-between items-start">
               <h3
                 class="text-2xl font-bold mb-4"
@@ -139,18 +207,6 @@
                     class="rounded-lg max-w-full h-auto max-h-96 mx-auto"
                   ></video>
                 </template>
-                <template
-                  x-if="!selectedFile.type || (!selectedFile.type.startsWith('image/') && !selectedFile.type.startsWith('video/'))"
-                >
-                  <div
-                    class="bg-gray-700 rounded-lg flex items-center justify-center h-64"
-                  >
-                    <div class="text-center">
-                      <i class="fas fa-file text-6xl text-gray-500"></i>
-                      <p class="mt-4">Preview not available</p>
-                    </div>
-                  </div>
-                </template>
               </div>
               <div>
                 <h4 class="font-bold text-lg mb-2">File Details</h4>
@@ -166,38 +222,34 @@
                   <p>
                     <strong>Uploaded:</strong>
                     <span
-                      x-text="new Date(selectedFile['uploadDate']).toLocaleString()"
+                      x-text="new Date(selectedFile.uploadDate).toLocaleString()"
                     ></span>
                   </p>
-                  <p>
-                    <strong>Owner:</strong>
-                    <span x-text="selectedFile.owner"></span>
-                  </p>
                 </div>
-                <div class="mt-6 flex space-x-4">
+                <div class="mt-6 grid grid-cols-2 sm:grid-cols-3 gap-3">
                   <button
-                    @click="downloadFile(selectedFile.id)"
-                    class="flex-1 text-center bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg transition-colors"
+                    @click="downloadFile(selectedFile)"
+                    class="text-center bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-6 rounded-lg transition-colors flex items-center justify-center"
                   >
-                    Download
+                    <i class="fas fa-download mr-2"></i> Download
                   </button>
                   <button
-                    @click="openFullscreen"
+                    @click="openFullscreen()"
                     x-show="selectedFile.type && selectedFile.type.startsWith('image/')"
-                    class="flex-1 bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg transition-colors"
+                    class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-6 rounded-lg transition-colors flex items-center justify-center"
                   >
-                    Expand
+                    <i class="fas fa-expand mr-2"></i> Expand
                   </button>
                   <button
-                    @click="deleteFile(selectedFile.id)"
-                    class="flex-1 bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg transition-colors"
+                    @click="deleteFile(selectedFile)"
+                    class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-6 rounded-lg transition-colors flex items-center justify-center"
                   >
-                    Delete
+                    <i class="fas fa-trash mr-2"></i> Delete
                   </button>
                 </div>
               </div>
             </div>
-          </div>
+          </template>
         </div>
       </div>
 
@@ -205,14 +257,12 @@
       <div
         x-show="showFullscreenImage"
         @keydown.escape.window="showFullscreenImage = false"
-        class="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50"
+        class="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-[60]"
       >
-        <div @click.away="showFullscreenImage = false" class="relative">
-          <img
-            :src="fullscreenImageUrl"
-            class="max-w-screen-xl max-h-screen object-contain"
-          />
-        </div>
+        <img
+          :src="fullscreenImageUrl"
+          class="max-w-screen-xl max-h-screen object-contain"
+        />
         <button
           @click="showFullscreenImage = false"
           class="absolute top-4 right-4 text-white hover:text-gray-300 text-4xl"
