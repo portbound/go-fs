@@ -119,8 +119,8 @@ func (h *APIHandler) handleUploadFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if batchErrs != nil {
-		err = errors.Join(err, batchErrs)
-		response.WriteJSON(w, http.StatusMultiStatus, err)
+		// err = errors.Join(err, batchErrs)
+		response.WriteJSON(w, http.StatusMultiStatus, batchErrs.Error())
 		return
 	}
 
