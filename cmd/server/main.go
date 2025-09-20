@@ -66,8 +66,13 @@ func main() {
 
 	authMW := middleware.NewAuthMiddleware(authenticator, userService)
 	loggingMW := middleware.NewLoggingMiddleware(accessLogger)
-	mux.Handle("/", authMW.RequireWebAuth(http.FileServer(http.Dir("./web/public"))))
-	mux.Handle("/api/", authMW.RequireAPIAuth(http.StripPrefix("/api", apiMux)))
+	if cfg.Environment != "development" {
+		mux.Handle("/", authMW.RequireWebAuth(http.FileServer(http.Dir("./web/public"))))
+		mux.Handle("/api/", authMW.RequireAPIAuth(http.StripPrefix("/api", apiMux)))
+	} else {
+		mux.Handle("/", http.FileServer(http.Dir("./web/public")))
+		mux.Handle("/api/", http.StripPrefix("/api", apiMux))
+	}
 
 	server := http.Server{
 		Addr:    cfg.ServerPort,
