@@ -2,8 +2,6 @@
 package config
 
 import (
-	"fmt"
-
 	"github.com/joho/godotenv"
 	"github.com/kelseyhightower/envconfig"
 )
@@ -14,7 +12,6 @@ type Config struct {
 	DBConnStr       string `envconfig:"DB_CONNECTION_STRING" required:"true"`
 	DBEngine        string `envconfig:"DB_ENGINE" required:"true"`
 	StorageProvider string `envconfig:"STORAGE_PROVIDER" required:"true"`
-	BucketName      string `envconfig:"BUCKET_NAME" required:"true"`
 	TmpDir          string `envconfig:"TMP_DIR" default:"./local/tmp"`
 	LogDir          string `envconfig:"LOG_DIR" default:"./local/logs"`
 	GoogleClientID  string `envconfig:"GOOGLE_CLIENT_ID" required:"true"`
@@ -28,7 +25,7 @@ func Load() (*Config, error) {
 	var cfg Config
 	err := envconfig.Process("", &cfg)
 	if err != nil {
-		return nil, fmt.Errorf("[config.Load] failed to process config from environment: %w", err)
+		return nil, err
 	}
 
 	return &cfg, nil
