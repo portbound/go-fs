@@ -1,66 +1,78 @@
 # Go-FS: A Cloud-Native Photo Roll
 
-Go-FS is a self-hosted photo, GIF, and video storage platform designed to provide a seamless, native-like viewing experience for media stored in Google Cloud Storage (GCS). It acts as a "photo roll in the cloud," allowing users to perform standard CRUD opertions on their media.
+Go-F(ree)S(pace) is a self-hosted photo, GIF, and video storage platform designed to provide a seamless, native-like viewing experience for media stored in Google Cloud Storage (GCS). It acts as a "photo roll in the cloud".
 
 ## The "Why"
 
-This project was born out of curiosity, but ultimately pivoted to solve a problem for my wife: running out of phone storage due to an ever-growing collection of photos and videos. While existing cloud storage solutions are great for backups, they often lack a fluid and intuitive viewing experience for daily browsing. Go-FS bridges this gap, offering a *modest* but performant interface to browse media, without feeling like you've left your phone's native gallery.
+This project was born out of curiosity, but ultimately I ended up pivoting at least 3 times in an attempt to solve a problem for my wife: running out of phone storage due to an ever-growing collection of photos and videos.
 
-Also just trying to learn new things.
+Existing cloud storage solutions are great for backups, but they often lack a fluid and intuitive viewing experience for daily browsing. You kind of just upload things and forget about them. Go-FS is my attempt at bridging that gap, offering a *serviceable*, but performant interface to browse media. I am not a frontend developer lol.
 
 ## Features
 
 *   **Cloud Storage:** Securely stores all media in a Google Cloud Storage bucket.
-*   **Beautiful UI:** A clean, modern, and responsive web interface for browsing media.
-*   **CRUD Operations:** Full support for creating (uploading), reading (viewing), updating, and deleting files.
-*   **Thumbnail Generation:** Automatically generates thumbnails for faster previews.
+*   **Lightweight UI:** The frontend was built with a lightweight JS framework called AlpineJS. It's pretty minimal, but super snappy.
+*   **CRUD Ops:** Upload, download, or delete your images and videos.
+*   **Thumbnail Generation:** Automatically generates thumbnails for faster gallery rendering.
 *   **Easy Uploading:** Drag-and-drop file uploads.
 *   **File Details:** View detailed information for each file, including size, type, and upload date.
 
+
+
+Go-FS is built with a an unorthodox stack. I feel like people always say that HTMX is the frontend technology for backend engineers, but I just didn't like how tightly coupled things felt with Templ + HTMX. It was really cool to learn, and it reminded me of ASP.NET, but I just wanted to keep things more loosly coupled so I could plug a new frontend into it at some point if I decide to learn a JS framework for real.
+<img width="3005" height="896" alt="image" src="https://github.com/user-attachments/assets/aa28d42b-7f29-4ab6-9075-88afd0ed0f14" />
+<img width="3005" height="896" alt="image" src="https://github.com/user-attachments/assets/04399948-09f5-4e6d-9241-d746048776f8" />
+
 ## Technologies Used
-
-Go-FS is built with a modern stack, combining the power of Go on the backend with a lightweight and responsive frontend. 
-![hey_not_bad](https://github.com/portbound/go-fs/blob/main/Screenshot%20From%202025-09-16%2015-49-36.png)
-
 ### Backend
 
-*   **[Go](https://golang.org/)**: The primary language for the backend server and business logic.
-*   **[Google Cloud Storage (GCS)](https://cloud.google.com/storage)**: For robust and scalable media storage.
-*   **[SQLite](https://www.sqlite.org/index.html)**: Used as the local database for managing file metadata.
-*   **[SQLC](https://sqlc.dev/)**: Generates type-safe Go code from SQL queries.
+*   **[Go](https://golang.org/)** - The primary language for the backend server and business logic.
+*   **[Google Cloud Storage (GCS)](https://cloud.google.com/storage)** - For robust and scalable media storage.
+*   **[SQLite](https://www.sqlite.org/index.html)** - Used as the local database for managing file metadata.
+*   **[SQLC](https://sqlc.dev/)** - Generates type-safe Go code from SQL queries.
+*   **[Docker](https://www.docker.com/)** - Containerization
 
 ### Frontend
 
-*   **[Alpine.js](https://alpinejs.dev/)**: A rugged, minimal framework for composing JavaScript behavior in your markup.
-*   **[Tailwind CSS](https://tailwindcss.com/)**: A utility-first CSS framework for rapid UI development.
+*   **[Alpine.js](https://alpinejs.dev/)** - A rugged, minimal framework for composing JavaScript behavior in your markup.
+*   **[Tailwind CSS](https://tailwindcss.com/)** - A utility-first CSS framework for rapid UI development.
 
 ## Getting Started
 
-To get a local copy up and running, follow these simple steps.
+To get a local copy up and running, I recommed using docker. 
+
+*Authentication is disabled when the env variable ENVIRONMENT is set to "development".*
+
+As a disclaimer, this does require some knowledge and familiarity with GCS. I planned on supporting other providers but that was sort of a "because I can" and not a "because I need to" kind of thing. I may get around to it, but for now, spinning up a session running Go-FS does require a service account to work. 
+
+More on that here: https://cloud.google.com/iam/docs/service-accounts-create
 
 ### Prerequisites
 
-*   Go 1.21 or later
-*   A Google Cloud Platform account with a GCS bucket 
+*   Go 1.25 or later
+*   A Google Cloud Platform account
 
 ### Installation
 
-1.  **Clone the repo**
+1.  **Pull down the image**
     ```sh
-    git clone https://github.com/your_username/go-fs.git
-    cd go-fs
+    $ docker pull portbound/projects:gofs
     ```
-2.  **Install Go dependencies**
+2.  **Set up environment**
     ```sh
-    go mod tidy
+    $ mkdir -p local/app/{data, logs, secrets, tmp}
     ```
-3.  **Set up your environment variables**
-    Create a `.env` file in the root of the project and add the required fields. Ref `.env.example`
-
-4.  **Run the server**
+3. **Add GCS Service Account Key to `/local/secrets`**    
+4. **Ensure that `/data` is owned by your user**
     ```sh
-    go run cmd/server/main.go
+    $ sudo chown -R $(whoami):$(whoami) local/data
     ```
+    *Sqlite will write to this directory, and if it's owned by root, it will complain.*
+5. **Run the container**
+   ```sh
+   $ docker compose up -d 
+   ```
+   
 The application will be available at `http://localhost:8080`.
 
 
