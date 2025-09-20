@@ -60,12 +60,12 @@ More on that here: https://cloud.google.com/iam/docs/service-accounts-create
     ```
 2.  **Set up environment**
     ```sh
-    $ mkdir -p local/app/{data, logs, secrets, tmp}
+    $ mkdir -p ~/app/local/{data,logs,secrets,tmp}
     ```
-3. **Add GCS Service Account Key to `/local/secrets`**    
+3. **Add GCS Service Account Key to `~/app/local/secrets`**    
 4. **Ensure that `/data` is owned by your user**
     ```sh
-    $ sudo chown -R $(whoami):$(whoami) local/data
+    $ sudo chown -R $(whoami):$(whoami) ~/app/local/data
     ```
     *Sqlite will write to this directory, and if it's owned by root, it will complain.*
 5. **Run the container**
