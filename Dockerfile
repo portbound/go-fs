@@ -9,19 +9,13 @@ WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
 
-# Copy the rest of the application source code
 COPY . .
 
-# Build the Go application with CGO enabled
-# CGO_ENABLED=1 is the default, so we just need to ensure it's not disabled.
 RUN go build -a -ldflags="-w -s" -o /app/server ./cmd/server
 
-# --- Final Stage ---
 FROM alpine:latest
 
-RUN apk update && apk add --no-cache ffmpeg \
-    && which ffmpeg \
-    && echo $PATH
+RUN apk update && apk add --no-cache ffmpeg 
 
 # Set the working directory inside the container
 WORKDIR /app

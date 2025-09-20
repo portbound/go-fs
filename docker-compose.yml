@@ -1,0 +1,11 @@
+services:
+  gofs: 
+    image: portbound/projects:gofs
+    env_file: .env
+
+    volumes:
+      - ./local:/app/local
+      - ./local/data:/app/local/data
+
+    ports:
+      - "8080:8080"
