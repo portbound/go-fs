@@ -45,17 +45,14 @@ func (a *Authenticator) ValidateJWT(tokenString string) (*jwt.Token, error) {
 }
 
 func (a *Authenticator) GenerateCookie(expirationDate time.Time, jwt string) *http.Cookie {
-	var isDevelopment bool
-	if a.environment == "development" {
-		isDevelopment = true
-	}
+	isDevelopment := a.environment == "development"
 	return &http.Cookie{
 		Name:     "gofs_session",
 		Value:    jwt,
 		Path:     "/",
-		MaxAge:   int(time.Until(expirationDate)),
+		MaxAge:   int(time.Until(expirationDate).Seconds()),
 		HttpOnly: true,
-		Secure:   isDevelopment,
+		Secure:   !isDevelopment,
 		SameSite: http.SameSiteLaxMode,
 	}
 }
