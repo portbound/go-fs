@@ -8,4 +8,4 @@ services:
       - ./local/data:/app/local/data
 
     ports:
-      - "8080:8080"
+      - "5000:8080"
