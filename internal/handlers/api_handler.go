@@ -156,10 +156,10 @@ func (h *APIHandler) handleDownloadFile(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	if requester.Email != fm.Owner {
-		response.WriteJSONError(w, http.StatusForbidden, fmt.Sprintf("permission denied for user: '%s'", requester.Email))
-		return
-	}
+	// if requester.Email != fm.Owner {
+		// response.WriteJSONError(w, http.StatusForbidden, fmt.Sprintf("permission denied for user: '%s'", requester.Email))
+		// return
+	// }
 
 	fileReader, err := h.fs.DownloadFile(r.Context(), fm.ID, requester)
 	if err != nil {

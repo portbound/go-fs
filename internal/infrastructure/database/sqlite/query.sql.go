@@ -61,12 +61,11 @@ func (q *Queries) DeleteFileMeta(ctx context.Context, arg DeleteFileMetaParams) 
 
 const getAllFileMeta = `-- name: GetAllFileMeta :many
 SELECT id, parent_id, thumb_id, name, content_type, size, upload_date, owner FROM file_meta
-WHERE owner = ?
 ORDER BY upload_date
 `
 
-func (q *Queries) GetAllFileMeta(ctx context.Context, owner string) ([]FileMetum, error) {
-	rows, err := q.query(ctx, q.getAllFileMetaStmt, getAllFileMeta, owner)
+func (q *Queries) GetAllFileMeta(ctx context.Context) ([]FileMetum, error) {
+	rows, err := q.query(ctx, q.getAllFileMetaStmt, getAllFileMeta)
 	if err != nil {
 		return nil, err
 	}
@@ -100,16 +99,11 @@ func (q *Queries) GetAllFileMeta(ctx context.Context, owner string) ([]FileMetum
 const getFileMeta = `-- name: GetFileMeta :one
 SELECT id, parent_id, thumb_id, name, content_type, size, upload_date, owner FROM file_meta 
 WHERE id = ? 
-AND owner = ? LIMIT 1
+LIMIT 1
 `
 
-type GetFileMetaParams struct {
-	ID    string `json:"id"`
-	Owner string `json:"owner"`
-}
-
-func (q *Queries) GetFileMeta(ctx context.Context, arg GetFileMetaParams) (FileMetum, error) {
-	row := q.queryRow(ctx, q.getFileMetaStmt, getFileMeta, arg.ID, arg.Owner)
+func (q *Queries) GetFileMeta(ctx context.Context, id string) (FileMetum, error) {
+	row := q.queryRow(ctx, q.getFileMetaStmt, getFileMeta, id)
 	var i FileMetum
 	err := row.Scan(
 		&i.ID,
@@ -127,16 +121,11 @@ func (q *Queries) GetFileMeta(ctx context.Context, arg GetFileMetaParams) (FileM
 const getFileMetaByNameAndOwner = `-- name: GetFileMetaByNameAndOwner :one
 SELECT id, parent_id, thumb_id, name, content_type, size, upload_date, owner FROM file_meta
 WHERE name = ?
-AND owner = ? LIMIT 1
+LIMIT 1
 `
 
-type GetFileMetaByNameAndOwnerParams struct {
-	Name  string `json:"name"`
-	Owner string `json:"owner"`
-}
-
-func (q *Queries) GetFileMetaByNameAndOwner(ctx context.Context, arg GetFileMetaByNameAndOwnerParams) (FileMetum, error) {
-	row := q.queryRow(ctx, q.getFileMetaByNameAndOwnerStmt, getFileMetaByNameAndOwner, arg.Name, arg.Owner)
+func (q *Queries) GetFileMetaByNameAndOwner(ctx context.Context, name string) (FileMetum, error) {
+	row := q.queryRow(ctx, q.getFileMetaByNameAndOwnerStmt, getFileMetaByNameAndOwner, name)
 	var i FileMetum
 	err := row.Scan(
 		&i.ID,

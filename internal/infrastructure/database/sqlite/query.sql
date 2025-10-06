@@ -12,16 +12,15 @@ INSERT INTO file_meta (
 -- name: GetFileMeta :one
 SELECT * FROM file_meta 
 WHERE id = ? 
-AND owner = ? LIMIT 1;
+LIMIT 1;
 
 -- name: GetFileMetaByNameAndOwner :one
 SELECT * FROM file_meta
 WHERE name = ?
-AND owner = ? LIMIT 1;
+LIMIT 1;
 
 -- name: GetAllFileMeta :many
 SELECT * FROM file_meta
-WHERE owner = ?
 ORDER BY upload_date;
 
 -- name: DeleteFileMeta :exec
