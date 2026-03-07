@@ -71,7 +71,6 @@ func (h *APIHandler) handleUploadFile(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// name := filepath.Base(part.FileName())
 		contentType := part.Header.Get("Content-Type")
 		metaType := strings.Split(contentType, "/")[0]
 		if metaType != "image" && metaType != "video" {
@@ -80,25 +79,7 @@ func (h *APIHandler) handleUploadFile(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
-		// id := uuid.New().String()
-		// path, _, err := h.fileService.StageFileToDisk(r.Context(), id, part)
-		// if err != nil {
-		// 	logger.Error("failed to stage file to disk", "error", err, "id", id, "file_name", name)
-		// 	batchErrs = errors.Join(batchErrs, fmt.Errorf("failed to upload file: '%s'", name))
-		// 	continue
-		// }
-		// part.Close()
-
-		// fm := models.FileMeta{
-		// 	ID:          id,
-		// 	Name:        name,
-		// 	ContentType: contentType,
-		// 	Owner:       requester.Email,
-		// 	TmpFilePath: path,
-		// }
-
 		wg.Go(func() {
-			// if err := h.fileService.Upload(r.Context(), &fm, requester); err != nil {
 			if err := h.fileService.Upload(r.Context, part, requester)
 				logger.Error("file processing failed", "error", err, "id", id, "file_name", fm.Name)
 				select {

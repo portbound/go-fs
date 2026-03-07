@@ -1,4 +1,4 @@
-package blob
+package fs
 
 import (
 	"bytes"
@@ -20,6 +20,18 @@ import (
 	"github.com/portbound/go-fs/internal/user"
 )
 
+type MetaStore interface {
+	Save(ctx context.Context, m *Metadata) error
+	Get(ctx context.Context, id string, owner *user.User) (*Metadata, error)
+	Delete(ctx context.Context, id string, owner *user.User) error
+}
+
+type BlobStore interface {
+	Upload(ctx context.Context, fileName string, bucket string, src io.Reader) (int64, time.Time, error)
+	Download(ctx context.Context, fileName string, bucket string) (io.ReadCloser, error)
+	Delete(ctx context.Context, fileName string, bucket string) error
+}
+
 type Metadata struct {
 	ID          string    `json:"id"`
 	ParentID    string    `json:"parentId"`
@@ -32,27 +44,14 @@ type Metadata struct {
 	TmpFilePath string    `json:"tmpFile"`
 }
 
-type FileMetaStore interface {
-	Save(ctx context.Context, m *Metadata) error
-	ById(ctx context.Context, id string, owner *user.User) (*Metadata, error)
-	ByNameAndOwner(ctx context.Context, name string, owner *user.User) (*Metadata, error)
-	All(ctx context.Context, owner *user.User) ([]*Metadata, error)
-	Delete(ctx context.Context, id string, owner *user.User) error
-}
-
-type BlobStore interface {
-	Upload(ctx context.Context, fileName string, bucket string, src io.Reader) (int64, time.Time, error)
-	Download(ctx context.Context, fileName string, bucket string) (io.ReadCloser, error)
-	Delete(ctx context.Context, fileName string, bucket string) error
-}
-
 type Service struct {
-	meta FileMetaStore
-	blob BlobStore
+	meta   MetaStore
+	blob   BlobStore
+	tmpDir string
 }
 
-func NewService(m FileMetaStore, b BlobStore) *Service {
-	return &Service{meta: m, blob: b}
+func NewService(m MetaStore, b BlobStore, dir string) *Service {
+	return &Service{meta: m, blob: b, tmpDir: dir}
 }
 
 func (s *Service) Upload(ctx context.Context, part *multipart.Part, owner *user.User) error {
@@ -65,7 +64,7 @@ func (s *Service) Upload(ctx context.Context, part *multipart.Part, owner *user.
 
 	dbCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
-	_, err := s.meta.ByNameAndOwner(dbCtx, fileMeta.Name, owner)
+	_, err := s.meta.Get(dbCtx, fileMeta.Name, owner)
 	if err == nil {
 		return errors.New("file already exists")
 	}
@@ -73,12 +72,12 @@ func (s *Service) Upload(ctx context.Context, part *multipart.Part, owner *user.
 		return err
 	}
 
-	thumbReader, err := GenerateThumbnail(ctx, fileMeta)
+	thumbReader, err := generateThumbnail(ctx, s.tmpDir)
 	if err != nil {
 		return fmt.Errorf("thumbnail generation failed: %w", err)
 	}
 
-	thumbMeta := &Metadata{
+	thumbMeta := Metadata{
 		ID:          fmt.Sprintf("thumb-%s", fileMeta.ID),
 		ParentID:    fileMeta.ID,
 		Name:        fmt.Sprintf("thumb-%s", fileMeta.Name),
@@ -93,8 +92,8 @@ func (s *Service) Upload(ctx context.Context, part *multipart.Part, owner *user.
 
 	dbCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
-	if err := s.meta.Save(dbCtx, fileMeta); err != nil {
-		rbErr := fs.DeleteFile(ctx, thumbMeta.ID, owner)
+	if err := s.meta.Save(dbCtx, &thumbMeta); err != nil {
+		rbErr := s.Delete(ctx, thumbMeta.ID, owner)
 		if rbErr != nil {
 			err = errors.Join(err, fmt.Errorf("CRITICAL - failed to clean up orphaned file '%s': %w", thumbMeta.ID, rbErr))
 		}
@@ -111,13 +110,19 @@ func (s *Service) Upload(ctx context.Context, part *multipart.Part, owner *user.
 	fileMeta.ThumbID = thumbMeta.ID
 
 	// TODO we need to nuke the thumbnail if this fails :(
-	fileMeta.Size, fileMeta.UploadDate, err = fs.storage.Upload(ctx, fileMeta.ID, owner.BucketName, fileReader)
+	fileMeta.Size, fileMeta.UploadDate, err = s.blob.Upload(ctx, fileMeta.ID, owner.BucketName, fileReader)
 	if err != nil {
 		return fmt.Errorf("upload failed: %w", err)
 	}
 
-	if err := fs.fms.SaveFileMeta(ctx, fileMeta); err != nil {
-		rbErr := fs.DeleteFile(ctx, fileMeta.ID, owner)
+	dbCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	if err := s.meta.Save(dbCtx, &fileMeta); err != nil {
+		return err
+	}
+
+	if err := s.meta.Save(ctx, &fileMeta); err != nil {
+		rbErr := s.blob.Delete(ctx, fileMeta.ID, owner.BucketName)
 		if rbErr != nil {
 			err = errors.Join(err, fmt.Errorf("CRITICAL - failed to clean up orphaned file '%s': %w", fileMeta.ID, rbErr))
 		}
@@ -127,8 +132,8 @@ func (s *Service) Upload(ctx context.Context, part *multipart.Part, owner *user.
 	return nil
 }
 
-func (fs *fileService) DownloadFile(ctx context.Context, id string, owner *user.User) (io.ReadCloser, error) {
-	gcsReader, err := fs.storage.Download(ctx, id, owner.BucketName)
+func (s *Service) Download(ctx context.Context, id string, owner *user.User) (io.ReadCloser, error) {
+	gcsReader, err := s.blob.Download(ctx, id, owner.BucketName)
 	if err != nil {
 		return nil, err
 	}
@@ -136,54 +141,20 @@ func (fs *fileService) DownloadFile(ctx context.Context, id string, owner *user.
 	return gcsReader, nil
 }
 
-func (fs *fileService) DeleteFile(ctx context.Context, id string, owner *user.User) error {
-	if err := fs.storage.Delete(ctx, id, owner.BucketName); err != nil {
+func (s *Service) Delete(ctx context.Context, id string, owner *user.User) error {
+	if err := s.blob.Delete(ctx, id, owner.BucketName); err != nil {
 		return err
 	}
+
+	if err := s.meta.Delete(ctx, id, owner); err != nil {
+	}
+
 	return nil
 }
 
-func (fs *fileService) StageFileToDisk(ctx context.Context, fileName string, reader io.Reader) (string, int64, error) {
-	type chanl struct {
-		bytesWritten int64
-		err          error
-	}
-
-	path := fs.tmpDir
-	if err := os.MkdirAll(path, 0755); err != nil {
-		return "", 0, fmt.Errorf("failed to create tmp dir at '%s': %w", path, err)
-	}
-
-	file, err := os.Create(filepath.Join(path, fileName))
-	if err != nil {
-		return "", 0, fmt.Errorf("failed to create tmp file for '%s': %w", fileName, err)
-	}
-	defer file.Close()
-
-	ch := make(chan *chanl, 1)
-	go func() {
-		bytesWritten, copyErr := io.Copy(file, reader)
-		ch <- &chanl{bytesWritten: bytesWritten, err: copyErr}
-	}()
-
-	select {
-	case <-ctx.Done():
-		defer os.Remove(file.Name())
-		return "", 0, ctx.Err()
-	case result := <-ch:
-		if result.err != nil {
-			defer os.Remove(file.Name())
-			return "", 0, err
-		}
-		return file.Name(), result.bytesWritten, nil
-	}
-}
-
-func GenerateThumbnail(ctx context.Context, fm *models.FileMeta) (io.Reader, error) {
-	var buf bytes.Buffer
-
+func generateThumbnail(ctx context.Context, path string) (io.Reader, error) {
 	args := []string{
-		"-i", fm.TmpFilePath,
+		"-i", path,
 		"-vf", "scale=150:150:force_original_aspect_ratio=increase,crop=150:150",
 		"-vframes", "1",
 		"-f", "mjpeg",
@@ -192,15 +163,52 @@ func GenerateThumbnail(ctx context.Context, fm *models.FileMeta) (io.Reader, err
 
 	ffmpegCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
+
+	var buf bytes.Buffer
 	cmd := exec.CommandContext(ffmpegCtx, "ffmpeg", args...)
 	cmd.Stdout = &buf
-
 	if err := cmd.Run(); err != nil {
 		return nil, err
 	}
 
 	return &buf, nil
 }
+
+// func (fs *fileService) StageFileToDisk(ctx context.Context, fileName string, reader io.Reader) (string, int64, error) {
+// 	type chanl struct {
+// 		bytesWritten int64
+// 		err          error
+// 	}
+//
+// 	path := fs.tmpDir
+// 	if err := os.MkdirAll(path, 0755); err != nil {
+// 		return "", 0, fmt.Errorf("failed to create tmp dir at '%s': %w", path, err)
+// 	}
+//
+// 	file, err := os.Create(filepath.Join(path, fileName))
+// 	if err != nil {
+// 		return "", 0, fmt.Errorf("failed to create tmp file for '%s': %w", fileName, err)
+// 	}
+// 	defer file.Close()
+//
+// 	ch := make(chan *chanl, 1)
+// 	go func() {
+// 		bytesWritten, copyErr := io.Copy(file, reader)
+// 		ch <- &chanl{bytesWritten: bytesWritten, err: copyErr}
+// 	}()
+//
+// 	select {
+// 	case <-ctx.Done():
+// 		defer os.Remove(file.Name())
+// 		return "", 0, ctx.Err()
+// 	case result := <-ch:
+// 		if result.err != nil {
+// 			defer os.Remove(file.Name())
+// 			return "", 0, err
+// 		}
+// 		return file.Name(), result.bytesWritten, nil
+// 	}
+// }
 
 // func (s *Service) SaveFileMeta(ctx context.Context, fm *models.FileMeta) error {
 // 	dbCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
