@@ -4,11 +4,9 @@ import (
 	"context"
 	_ "embed"
 	"io"
-	"time"
 )
 
 // // go:embed test.jpg
-// var testFile []byte
 
 type MockFileStore struct{}
 
@@ -16,8 +14,8 @@ func NewMockFileStore() *MockFileStore {
 	return &MockFileStore{}
 }
 
-func (s *MockFileStore) Upload(ctx context.Context, fileName string, bucket string, src io.Reader) (int64, time.Time, error) {
-	return 0, time.Time{}, nil
+func (s *MockFileStore) Upload(ctx context.Context, fileName string, bucket string, src io.Reader) (int64, int64, error) {
+	return 0, 0, nil
 }
 
 func (s *MockFileStore) Download(ctx context.Context, fileName string, bucket string) (io.ReadCloser, error) {

@@ -10,143 +10,45 @@ import (
 	"database/sql"
 )
 
-const createFileMeta = `-- name: CreateFileMeta :exec
-INSERT INTO file_meta (
-	id, parent_id, thumb_id, name, content_type, size, upload_date, owner 
-) VALUES (
-	?, ?, ?, ?, ?, ?, ?, ?
-)
-`
-
-type CreateFileMetaParams struct {
-	ID          string         `json:"id"`
-	ParentID    sql.NullString `json:"parent_id"`
-	ThumbID     sql.NullString `json:"thumb_id"`
-	Name        string         `json:"name"`
-	ContentType string         `json:"content_type"`
-	Size        int64          `json:"size"`
-	UploadDate  string         `json:"upload_date"`
-	Owner       string         `json:"owner"`
-}
-
-func (q *Queries) CreateFileMeta(ctx context.Context, arg CreateFileMetaParams) error {
-	_, err := q.exec(ctx, q.createFileMetaStmt, createFileMeta,
-		arg.ID,
-		arg.ParentID,
-		arg.ThumbID,
-		arg.Name,
-		arg.ContentType,
-		arg.Size,
-		arg.UploadDate,
-		arg.Owner,
-	)
-	return err
-}
-
-const deleteFileMeta = `-- name: DeleteFileMeta :exec
-DELETE FROM file_meta 
+const deleteMetadata = `-- name: DeleteMetadata :exec
+DELETE FROM metadata 
 WHERE id = ?
-AND owner = ?
+AND user_id = ?
 `
 
-type DeleteFileMetaParams struct {
-	ID    string `json:"id"`
-	Owner string `json:"owner"`
+type DeleteMetadataParams struct {
+	ID     string `json:"id"`
+	UserID string `json:"user_id"`
 }
 
-func (q *Queries) DeleteFileMeta(ctx context.Context, arg DeleteFileMetaParams) error {
-	_, err := q.exec(ctx, q.deleteFileMetaStmt, deleteFileMeta, arg.ID, arg.Owner)
+func (q *Queries) DeleteMetadata(ctx context.Context, arg DeleteMetadataParams) error {
+	_, err := q.exec(ctx, q.deleteMetadataStmt, deleteMetadata, arg.ID, arg.UserID)
 	return err
 }
 
-const getAllFileMeta = `-- name: GetAllFileMeta :many
-SELECT id, parent_id, thumb_id, name, content_type, size, upload_date, owner FROM file_meta
-WHERE owner = ?
-ORDER BY upload_date
-`
-
-func (q *Queries) GetAllFileMeta(ctx context.Context, owner string) ([]FileMetum, error) {
-	rows, err := q.query(ctx, q.getAllFileMetaStmt, getAllFileMeta, owner)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []FileMetum
-	for rows.Next() {
-		var i FileMetum
-		if err := rows.Scan(
-			&i.ID,
-			&i.ParentID,
-			&i.ThumbID,
-			&i.Name,
-			&i.ContentType,
-			&i.Size,
-			&i.UploadDate,
-			&i.Owner,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const getFileMeta = `-- name: GetFileMeta :one
-SELECT id, parent_id, thumb_id, name, content_type, size, upload_date, owner FROM file_meta 
+const getMetadata = `-- name: GetMetadata :one
+SELECT id, file_name, thumb_name, content_type, size, timestamp, user_id, deleted_at FROM metadata 
 WHERE id = ? 
-AND owner = ? LIMIT 1
+AND user_id = ? LIMIT 1
 `
 
-type GetFileMetaParams struct {
-	ID    string `json:"id"`
-	Owner string `json:"owner"`
+type GetMetadataParams struct {
+	ID     string `json:"id"`
+	UserID string `json:"user_id"`
 }
 
-func (q *Queries) GetFileMeta(ctx context.Context, arg GetFileMetaParams) (FileMetum, error) {
-	row := q.queryRow(ctx, q.getFileMetaStmt, getFileMeta, arg.ID, arg.Owner)
-	var i FileMetum
+func (q *Queries) GetMetadata(ctx context.Context, arg GetMetadataParams) (Metadata, error) {
+	row := q.queryRow(ctx, q.getMetadataStmt, getMetadata, arg.ID, arg.UserID)
+	var i Metadata
 	err := row.Scan(
 		&i.ID,
-		&i.ParentID,
-		&i.ThumbID,
-		&i.Name,
+		&i.FileName,
+		&i.ThumbName,
 		&i.ContentType,
 		&i.Size,
-		&i.UploadDate,
-		&i.Owner,
-	)
-	return i, err
-}
-
-const getFileMetaByNameAndOwner = `-- name: GetFileMetaByNameAndOwner :one
-SELECT id, parent_id, thumb_id, name, content_type, size, upload_date, owner FROM file_meta
-WHERE name = ?
-AND owner = ? LIMIT 1
-`
-
-type GetFileMetaByNameAndOwnerParams struct {
-	Name  string `json:"name"`
-	Owner string `json:"owner"`
-}
-
-func (q *Queries) GetFileMetaByNameAndOwner(ctx context.Context, arg GetFileMetaByNameAndOwnerParams) (FileMetum, error) {
-	row := q.queryRow(ctx, q.getFileMetaByNameAndOwnerStmt, getFileMetaByNameAndOwner, arg.Name, arg.Owner)
-	var i FileMetum
-	err := row.Scan(
-		&i.ID,
-		&i.ParentID,
-		&i.ThumbID,
-		&i.Name,
-		&i.ContentType,
-		&i.Size,
-		&i.UploadDate,
-		&i.Owner,
+		&i.Timestamp,
+		&i.UserID,
+		&i.DeletedAt,
 	)
 	return i, err
 }
@@ -161,4 +63,51 @@ func (q *Queries) GetUser(ctx context.Context, email string) (User, error) {
 	var i User
 	err := row.Scan(&i.ID, &i.Email, &i.BucketName)
 	return i, err
+}
+
+const saveMetadata = `-- name: SaveMetadata :exec
+INSERT INTO metadata (
+	id, file_name, thumb_name, content_type, size, timestamp, user_id
+) VALUES (
+	?, ?, ?, ?, ?, ?, ?
+)
+`
+
+type SaveMetadataParams struct {
+	ID          string         `json:"id"`
+	FileName    string         `json:"file_name"`
+	ThumbName   sql.NullString `json:"thumb_name"`
+	ContentType string         `json:"content_type"`
+	Size        int64          `json:"size"`
+	Timestamp   int64          `json:"timestamp"`
+	UserID      string         `json:"user_id"`
+}
+
+func (q *Queries) SaveMetadata(ctx context.Context, arg SaveMetadataParams) error {
+	_, err := q.exec(ctx, q.saveMetadataStmt, saveMetadata,
+		arg.ID,
+		arg.FileName,
+		arg.ThumbName,
+		arg.ContentType,
+		arg.Size,
+		arg.Timestamp,
+		arg.UserID,
+	)
+	return err
+}
+
+const updateMetadata = `-- name: UpdateMetadata :exec
+UPDATE metadata
+SET deleted_at = ?
+WHERE id = ?
+`
+
+type UpdateMetadataParams struct {
+	DeletedAt sql.NullString `json:"deleted_at"`
+	ID        string         `json:"id"`
+}
+
+func (q *Queries) UpdateMetadata(ctx context.Context, arg UpdateMetadataParams) error {
+	_, err := q.exec(ctx, q.updateMetadataStmt, updateMetadata, arg.DeletedAt, arg.ID)
+	return err
 }

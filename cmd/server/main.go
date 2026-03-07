@@ -10,9 +10,13 @@ import (
 	"path/filepath"
 
 	"github.com/portbound/go-fs/internal/api"
+	"github.com/portbound/go-fs/internal/database/sqlite"
+	"github.com/portbound/go-fs/internal/fs"
 	"github.com/portbound/go-fs/internal/middleware"
 	"github.com/portbound/go-fs/internal/repositories"
 	"github.com/portbound/go-fs/internal/services"
+	"github.com/portbound/go-fs/internal/storage/gcs"
+	"github.com/portbound/go-fs/internal/user"
 	"github.com/portbound/go-fs/pkg/auth"
 )
 
@@ -37,20 +41,19 @@ func main() {
 	accessLogger := slog.New(slog.NewJSONHandler(accessLog, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	errorLogger := slog.New(slog.NewJSONHandler(errorLog, &slog.HandlerOptions{Level: slog.LevelInfo}))
 
-	db, err := setupDB(cfg.DBEngine, cfg.DBConnStr)
+	sqlite, err := sqlite.NewSQLiteDB(cfg.DBConnStr)
 	if err != nil {
 		log.Fatalf("main.setupDB failed: %v", err)
 	}
-	defer db.Conn.Close()
+	defer sqlite.Conn.Close()
 
-	storage, err := setupStorage(cfg.StorageProvider, cfg.ProjectID)
+	gcs, err := gcs.New(cfg.ProjectId)
 	if err != nil {
 		log.Fatalf("main.setupStorage failed: %v", err)
 	}
 
-	fileMetaService := services.NewFileMetaService(db)
-	userService := services.NewUserService(db)
-	fileService := services.NewFileService(storage, fileMetaService, cfg.TmpDir)
+	fsService := fs.NewService(sqlite, gcs, cfg.TmpDir)
+	userService := user.NewService(sqlite)
 	authenticator := auth.NewAuthenticator(cfg.JWTSecret, cfg.GoogleClientID, cfg.Environment)
 
 	mux := http.NewServeMux()
@@ -58,7 +61,7 @@ func main() {
 	webHandler.RegisterRoutes(mux)
 
 	apiMux := http.NewServeMux()
-	apiHandler := api.NewHandler(fileService, fileMetaService, userService, errorLogger)
+	apiHandler := api.New(fsService, userService, errorLogger)
 	apiHandler.RegisterRoutes(apiMux)
 
 	authMW := middleware.NewAuthMiddleware(authenticator, userService)
@@ -85,17 +88,16 @@ func main() {
 func setupDB(driverName string, connStr string) (*sqlite.SQLiteDB, error) {
 	switch driverName {
 	case "sqlite3":
-		return sqlite.NewSQLiteDB(connStr)
+		return
 	default:
 		return nil, fmt.Errorf("unsupported database engine: %s", driverName)
 	}
 }
 
-func setupStorage(storageProvider string, projectID string) (repositories.StorageRepository, error) {
+func setupStorage(storageProvider string, projectId string) (repositories.StorageRepository, error) {
 	switch storageProvider {
 	case "gcs":
-		ctx := context.Background()
-		return gcs.NewStorage(ctx, projectID)
+		return gcs.NewStorage(ctx, projectId)
 	default:
 		return nil, fmt.Errorf("unsupported cloud provider: %s", storageProvider)
 	}

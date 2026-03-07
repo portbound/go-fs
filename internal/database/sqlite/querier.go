@@ -9,12 +9,11 @@ import (
 )
 
 type Querier interface {
-	CreateFileMeta(ctx context.Context, arg CreateFileMetaParams) error
-	DeleteFileMeta(ctx context.Context, arg DeleteFileMetaParams) error
-	GetAllFileMeta(ctx context.Context, owner string) ([]FileMetum, error)
-	GetFileMeta(ctx context.Context, arg GetFileMetaParams) (FileMetum, error)
-	GetFileMetaByNameAndOwner(ctx context.Context, arg GetFileMetaByNameAndOwnerParams) (FileMetum, error)
+	DeleteMetadata(ctx context.Context, arg DeleteMetadataParams) error
+	GetMetadata(ctx context.Context, arg GetMetadataParams) (Metadata, error)
 	GetUser(ctx context.Context, email string) (User, error)
+	SaveMetadata(ctx context.Context, arg SaveMetadataParams) error
+	UpdateMetadata(ctx context.Context, arg UpdateMetadataParams) error
 }
 
 var _ Querier = (*Queries)(nil)

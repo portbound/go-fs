@@ -24,57 +24,49 @@ func New(db DBTX) *Queries {
 func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	q := Queries{db: db}
 	var err error
-	if q.createFileMetaStmt, err = db.PrepareContext(ctx, createFileMeta); err != nil {
-		return nil, fmt.Errorf("error preparing query CreateFileMeta: %w", err)
+	if q.deleteMetadataStmt, err = db.PrepareContext(ctx, deleteMetadata); err != nil {
+		return nil, fmt.Errorf("error preparing query DeleteMetadata: %w", err)
 	}
-	if q.deleteFileMetaStmt, err = db.PrepareContext(ctx, deleteFileMeta); err != nil {
-		return nil, fmt.Errorf("error preparing query DeleteFileMeta: %w", err)
-	}
-	if q.getAllFileMetaStmt, err = db.PrepareContext(ctx, getAllFileMeta); err != nil {
-		return nil, fmt.Errorf("error preparing query GetAllFileMeta: %w", err)
-	}
-	if q.getFileMetaStmt, err = db.PrepareContext(ctx, getFileMeta); err != nil {
-		return nil, fmt.Errorf("error preparing query GetFileMeta: %w", err)
-	}
-	if q.getFileMetaByNameAndOwnerStmt, err = db.PrepareContext(ctx, getFileMetaByNameAndOwner); err != nil {
-		return nil, fmt.Errorf("error preparing query GetFileMetaByNameAndOwner: %w", err)
+	if q.getMetadataStmt, err = db.PrepareContext(ctx, getMetadata); err != nil {
+		return nil, fmt.Errorf("error preparing query GetMetadata: %w", err)
 	}
 	if q.getUserStmt, err = db.PrepareContext(ctx, getUser); err != nil {
 		return nil, fmt.Errorf("error preparing query GetUser: %w", err)
+	}
+	if q.saveMetadataStmt, err = db.PrepareContext(ctx, saveMetadata); err != nil {
+		return nil, fmt.Errorf("error preparing query SaveMetadata: %w", err)
+	}
+	if q.updateMetadataStmt, err = db.PrepareContext(ctx, updateMetadata); err != nil {
+		return nil, fmt.Errorf("error preparing query UpdateMetadata: %w", err)
 	}
 	return &q, nil
 }
 
 func (q *Queries) Close() error {
 	var err error
-	if q.createFileMetaStmt != nil {
-		if cerr := q.createFileMetaStmt.Close(); cerr != nil {
-			err = fmt.Errorf("error closing createFileMetaStmt: %w", cerr)
+	if q.deleteMetadataStmt != nil {
+		if cerr := q.deleteMetadataStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing deleteMetadataStmt: %w", cerr)
 		}
 	}
-	if q.deleteFileMetaStmt != nil {
-		if cerr := q.deleteFileMetaStmt.Close(); cerr != nil {
-			err = fmt.Errorf("error closing deleteFileMetaStmt: %w", cerr)
-		}
-	}
-	if q.getAllFileMetaStmt != nil {
-		if cerr := q.getAllFileMetaStmt.Close(); cerr != nil {
-			err = fmt.Errorf("error closing getAllFileMetaStmt: %w", cerr)
-		}
-	}
-	if q.getFileMetaStmt != nil {
-		if cerr := q.getFileMetaStmt.Close(); cerr != nil {
-			err = fmt.Errorf("error closing getFileMetaStmt: %w", cerr)
-		}
-	}
-	if q.getFileMetaByNameAndOwnerStmt != nil {
-		if cerr := q.getFileMetaByNameAndOwnerStmt.Close(); cerr != nil {
-			err = fmt.Errorf("error closing getFileMetaByNameAndOwnerStmt: %w", cerr)
+	if q.getMetadataStmt != nil {
+		if cerr := q.getMetadataStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing getMetadataStmt: %w", cerr)
 		}
 	}
 	if q.getUserStmt != nil {
 		if cerr := q.getUserStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing getUserStmt: %w", cerr)
+		}
+	}
+	if q.saveMetadataStmt != nil {
+		if cerr := q.saveMetadataStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing saveMetadataStmt: %w", cerr)
+		}
+	}
+	if q.updateMetadataStmt != nil {
+		if cerr := q.updateMetadataStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing updateMetadataStmt: %w", cerr)
 		}
 	}
 	return err
@@ -114,25 +106,23 @@ func (q *Queries) queryRow(ctx context.Context, stmt *sql.Stmt, query string, ar
 }
 
 type Queries struct {
-	db                            DBTX
-	tx                            *sql.Tx
-	createFileMetaStmt            *sql.Stmt
-	deleteFileMetaStmt            *sql.Stmt
-	getAllFileMetaStmt            *sql.Stmt
-	getFileMetaStmt               *sql.Stmt
-	getFileMetaByNameAndOwnerStmt *sql.Stmt
-	getUserStmt                   *sql.Stmt
+	db                 DBTX
+	tx                 *sql.Tx
+	deleteMetadataStmt *sql.Stmt
+	getMetadataStmt    *sql.Stmt
+	getUserStmt        *sql.Stmt
+	saveMetadataStmt   *sql.Stmt
+	updateMetadataStmt *sql.Stmt
 }
 
 func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 	return &Queries{
-		db:                            tx,
-		tx:                            tx,
-		createFileMetaStmt:            q.createFileMetaStmt,
-		deleteFileMetaStmt:            q.deleteFileMetaStmt,
-		getAllFileMetaStmt:            q.getAllFileMetaStmt,
-		getFileMetaStmt:               q.getFileMetaStmt,
-		getFileMetaByNameAndOwnerStmt: q.getFileMetaByNameAndOwnerStmt,
-		getUserStmt:                   q.getUserStmt,
+		db:                 tx,
+		tx:                 tx,
+		deleteMetadataStmt: q.deleteMetadataStmt,
+		getMetadataStmt:    q.getMetadataStmt,
+		getUserStmt:        q.getUserStmt,
+		saveMetadataStmt:   q.saveMetadataStmt,
+		updateMetadataStmt: q.updateMetadataStmt,
 	}
 }

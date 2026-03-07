@@ -11,38 +11,36 @@ import (
 	"mime"
 	"mime/multipart"
 	"net/http"
-	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
+	"github.com/portbound/go-fs/internal/fs"
 	"github.com/portbound/go-fs/internal/middleware"
 	"github.com/portbound/go-fs/internal/user"
 	"github.com/portbound/go-fs/pkg/response"
 )
 
-type APIHandler struct {
-	fileService services.FileService
-	fms         services.FileMetaService
+type Handler struct {
+	fileService fs.Service
 	userService user.Service
 	logger      *slog.Logger
 }
 
-func NewHandler(fs services.FileService, fms services.FileMetaService, us services.UserService, logger *slog.Logger) *APIHandler {
-	return &APIHandler{fileService: fs, fms: fms, userService: us, logger: logger}
+func New(f fs.Service, u user.Service, logger *slog.Logger) *Handler {
+	return &Handler{fileService: f, userService: u, logger: logger}
 }
 
-func (h *APIHandler) RegisterRoutes(mux *http.ServeMux) {
+func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /files", h.handleUploadFile)
 	mux.HandleFunc("GET /files", h.handleFetchFileMeta)
 	mux.HandleFunc("GET /files/{id}", h.handleDownloadFile)
 	mux.HandleFunc("DELETE /files/{id}", h.handleDeleteFile)
 }
 
-func (h *APIHandler) handleUploadFile(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) handleUploadFile(w http.ResponseWriter, r *http.Request) {
 	logger := h.logger.With("handler", "handleUploadFile")
-	requester, ok := r.Context().Value(middleware.RequesterKey).(*models.User)
+	requester, ok := r.Context().Value(middleware.RequesterKey).(*user.User)
 	if !ok {
 		logger.Error("unauthorized request: user not found in context")
 		response.WriteJSONError(w, http.StatusUnauthorized, "unauthorized: user is missing from request")
@@ -80,7 +78,7 @@ func (h *APIHandler) handleUploadFile(w http.ResponseWriter, r *http.Request) {
 		}
 
 		wg.Go(func() {
-			if err := h.fileService.Upload(r.Context, part, requester)
+			if err := h.fileService.Upload(r.Context, part, metadata, part, requester.Email); err != nil {
 				logger.Error("file processing failed", "error", err, "id", id, "file_name", fm.Name)
 				select {
 				case ch <- err:
@@ -108,9 +106,9 @@ func (h *APIHandler) handleUploadFile(w http.ResponseWriter, r *http.Request) {
 	response.WriteJSON(w, http.StatusCreated, nil)
 }
 
-func (h *APIHandler) handleDownloadFile(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) handleDownloadFile(w http.ResponseWriter, r *http.Request) {
 	logger := h.logger.With("handler", "handleDownloadFile")
-	requester, ok := r.Context().Value(middleware.RequesterKey).(*models.User)
+	requester, ok := r.Context().Value(middleware.RequesterKey).(*user.User)
 	if !ok {
 		logger.Warn("unauthorized request: user not found in context")
 		response.WriteJSONError(w, http.StatusUnauthorized, "unauthorized: user is missing from request")
@@ -159,7 +157,7 @@ func (h *APIHandler) handleDownloadFile(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
-func (h *APIHandler) handleFetchFileMeta(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) handleFetchFileMeta(w http.ResponseWriter, r *http.Request) {
 	logger := h.logger.With("handler", "handleFetchFileMeta")
 	requester, ok := r.Context().Value(middleware.RequesterKey).(*models.User)
 	if !ok {
@@ -184,9 +182,9 @@ func (h *APIHandler) handleFetchFileMeta(w http.ResponseWriter, r *http.Request)
 	response.WriteJSON(w, http.StatusOK, afm)
 }
 
-func (h *APIHandler) handleDeleteFile(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) handleDeleteFile(w http.ResponseWriter, r *http.Request) {
 	logger := h.logger.With("handler", "handleDeleteFile")
-	requester, ok := r.Context().Value(middleware.RequesterKey).(*models.User)
+	requester, ok := r.Context().Value(middleware.RequesterKey).(*user.User)
 	if !ok {
 		logger.Warn("unauthorized request: user not found in context")
 		response.WriteJSONError(w, http.StatusUnauthorized, "unauthorized: user is missing from request")
@@ -200,51 +198,6 @@ func (h *APIHandler) handleDeleteFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dbCtx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
-	defer cancel()
-	fm, err := h.fms.LookupFileMeta(dbCtx, id, requester)
-	if err != nil {
-		logger.Error("failed to fetch metadata for file", "error", err, "id", id)
-		if errors.Is(err, sql.ErrNoRows) {
-			response.WriteJSONError(w, http.StatusNotFound, fmt.Sprintf("file not found for id: '%s'", id))
-			return
-		}
-		response.WriteJSONError(w, http.StatusInternalServerError, fmt.Sprintf("failed to delete file for id: '%s'", id))
-		return
+	if err := h.fileService.Delete(r.Context(), id, requester); err != nil {
 	}
-
-	if requester.Email != fm.Owner {
-		response.WriteJSONError(w, http.StatusForbidden, fmt.Sprintf("permission denied for user: '%s'", requester.Email))
-		return
-	}
-
-	var errs error
-	// TODO need to come up with a less brittle implementation to call here using the saga pattern or some sort of transaction
-	// For now I think it makes the most sense to simply delete everything on GCS first, and then if both files succeed we can remove file meta... That way we don't end up with orphaned files on GCS and no track record of them in the DB if the call to GCS fails
-	// Still super brittle but better for development I guess
-	if err := h.fileService.DeleteFile(r.Context(), fm.ThumbID, requester); err != nil {
-		errs = errors.Join(errs, err)
-	}
-
-	if err := h.fileService.DeleteFile(r.Context(), fm.ID, requester); err != nil {
-		errs = errors.Join(errs, err)
-	}
-
-	if errs == nil {
-		if err := h.fms.DeleteFileMeta(r.Context(), fm.ThumbID, requester); err != nil {
-			errs = errors.Join(errs, err)
-		}
-
-		if err := h.fms.DeleteFileMeta(r.Context(), fm.ID, requester); err != nil {
-			errs = errors.Join(errs, err)
-		}
-	}
-
-	if errs != nil {
-		logger.Error("failed to fully delete file", "error", errs, "id", id)
-		response.WriteJSONError(w, http.StatusMultiStatus, "failed to fully delete file for id: '%s'")
-		return
-	}
-
-	response.WriteJSON(w, http.StatusNoContent, nil)
 }

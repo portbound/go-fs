@@ -13,8 +13,8 @@ func (db *SQLiteDB) GetUser(ctx context.Context, email string) (*user.User, erro
 	}
 
 	return &user.User{
-		ID:         data.ID,
-		Email:      data.Email,
-		BucketName: data.BucketName,
+		Id:     data.ID,
+		Email:  data.Email,
+		Bucket: data.BucketName,
 	}, nil
 }

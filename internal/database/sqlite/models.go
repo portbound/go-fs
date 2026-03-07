@@ -8,15 +8,15 @@ import (
 	"database/sql"
 )
 
-type FileMetum struct {
+type Metadata struct {
 	ID          string         `json:"id"`
-	ParentID    sql.NullString `json:"parent_id"`
-	ThumbID     sql.NullString `json:"thumb_id"`
-	Name        string         `json:"name"`
+	FileName    string         `json:"file_name"`
+	ThumbName   sql.NullString `json:"thumb_name"`
 	ContentType string         `json:"content_type"`
 	Size        int64          `json:"size"`
-	UploadDate  string         `json:"upload_date"`
-	Owner       string         `json:"owner"`
+	Timestamp   int64          `json:"timestamp"`
+	UserID      string         `json:"user_id"`
+	DeletedAt   sql.NullString `json:"deleted_at"`
 }
 
 type User struct {

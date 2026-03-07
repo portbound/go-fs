@@ -4,14 +4,14 @@ CREATE TABLE IF NOT EXISTS users (
 		bucket_name TEXT NOT NULL UNIQUE
 );
 
-CREATE TABLE IF NOT EXISTS file_meta (
+CREATE TABLE IF NOT EXISTS metadata (
 		id TEXT NOT NULL PRIMARY KEY, 
-		parent_id TEXT,
-		thumb_id TEXT,
-		name TEXT NOT NULL, 
+		file_name TEXT NOT NULL, 
+		thumb_name TEXT,
 		content_type TEXT NOT NULL,
 		size INTEGER NOT NULL,
-		upload_date TEXT NOT NULL,
-		owner TEXT NOT NULL,
+		timestamp INTEGER NOT NULL,
+		user_id TEXT NOT NULL,
+		deleted_at TEXT,
 		UNIQUE (name, owner)
-)
+);

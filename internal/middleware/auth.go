@@ -7,8 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/portbound/go-fs/internal/models"
-	"github.com/portbound/go-fs/internal/services"
+	"github.com/portbound/go-fs/internal/user"
 	"github.com/portbound/go-fs/pkg/auth"
 	"github.com/portbound/go-fs/pkg/response"
 )
@@ -19,11 +18,11 @@ const RequesterKey contextKey = "user"
 
 type AuthMiddleware struct {
 	authenticator *auth.Authenticator
-	userService   services.UserService
+	userService   *user.Service
 }
 
-func NewAuthMiddleware(a *auth.Authenticator, us services.UserService) *AuthMiddleware {
-	return &AuthMiddleware{authenticator: a, userService: us}
+func NewAuthMiddleware(a *auth.Authenticator, u *user.Service) *AuthMiddleware {
+	return &AuthMiddleware{authenticator: a, userService: u}
 }
 
 func (mw *AuthMiddleware) RequireWebAuth(next http.Handler) http.Handler {
@@ -69,7 +68,7 @@ func (mw *AuthMiddleware) RequireAPIAuth(next http.Handler) http.Handler {
 	})
 }
 
-func (mw *AuthMiddleware) authenticateUser(ctx context.Context, token string) (*models.User, error) {
+func (mw *AuthMiddleware) authenticateUser(ctx context.Context, token string) (*user.User, error) {
 	jwt, err := mw.authenticator.ValidateJWT(token)
 	if err != nil {
 		return nil, err
@@ -82,7 +81,7 @@ func (mw *AuthMiddleware) authenticateUser(ctx context.Context, token string) (*
 
 	dbCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	user, err := mw.userService.LookupUser(dbCtx, userEmail)
+	user, err := mw.userService.Get(dbCtx, userEmail)
 	if err != nil {
 		return nil, err
 	}
