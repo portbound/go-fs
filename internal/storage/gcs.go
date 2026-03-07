@@ -1,5 +1,4 @@
-// Package gcs
-package gcs
+package storage
 
 import (
 	"context"
@@ -11,27 +10,27 @@ import (
 	"cloud.google.com/go/storage"
 )
 
-type Storage struct {
+type Gcs struct {
 	client    *storage.Client
 	projectID string
 	mu        sync.Mutex
 }
 
-func NewStorage(ctx context.Context, projectID string) (*Storage, error) {
+func New(ctx context.Context, projectID string) (*Gcs, error) {
 	client, err := storage.NewClient(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return &Storage{client: client, projectID: projectID, mu: sync.Mutex{}}, nil
+	return &Gcs{client: client, projectID: projectID, mu: sync.Mutex{}}, nil
 }
 
-func (s *Storage) Upload(ctx context.Context, fileName string, bucketName string, src io.Reader) (int64, time.Time, error) {
-	bkt := s.client.Bucket(bucketName)
-	s.mu.Lock()
+func (g *Gcs) Upload(ctx context.Context, fileName string, bucketName string, src io.Reader) (int64, time.Time, error) {
+	bkt := g.client.Bucket(bucketName)
+	g.mu.Lock()
 	_, err := bkt.Attrs(ctx)
 	if err != nil {
 		if !errors.Is(err, storage.ErrBucketNotExist) {
-			s.mu.Unlock()
+			g.mu.Unlock()
 			return 0, time.Time{}, err
 		}
 
@@ -44,14 +43,14 @@ func (s *Storage) Upload(ctx context.Context, fileName string, bucketName string
 			LocationType:           "Region",
 		}
 
-		if err := bkt.Create(ctx, s.projectID, attrs); err != nil {
-			s.mu.Unlock()
+		if err := bkt.Create(ctx, g.projectID, attrs); err != nil {
+			g.mu.Unlock()
 			return 0, time.Time{}, err
 		}
 	}
-	s.mu.Unlock()
+	g.mu.Unlock()
 
-	obj := s.client.Bucket(bucketName).Object(fileName)
+	obj := g.client.Bucket(bucketName).Object(fileName)
 	wc := obj.NewWriter(ctx)
 
 	ctx, cancel := context.WithTimeout(ctx, time.Second*180)
@@ -73,8 +72,8 @@ func (s *Storage) Upload(ctx context.Context, fileName string, bucketName string
 	return attrs.Size, attrs.Created, nil
 }
 
-func (s *Storage) Download(ctx context.Context, fileName string, bucketName string) (io.ReadCloser, error) {
-	obj := s.client.Bucket(bucketName).Object(fileName)
+func (g *Gcs) Download(ctx context.Context, fileName string, bucketName string) (io.ReadCloser, error) {
+	obj := g.client.Bucket(bucketName).Object(fileName)
 
 	r, err := obj.NewReader(ctx)
 	if err != nil {
@@ -83,8 +82,8 @@ func (s *Storage) Download(ctx context.Context, fileName string, bucketName stri
 	return r, nil
 }
 
-func (s *Storage) Delete(ctx context.Context, id string, bucketName string) error {
-	obj := s.client.Bucket(bucketName).Object(id)
+func (g *Gcs) Delete(ctx context.Context, id string, bucketName string) error {
+	obj := g.client.Bucket(bucketName).Object(id)
 
 	if err := obj.Delete(ctx); err != nil {
 		return err

@@ -1,5 +1,5 @@
 // Package handlers
-package handlers
+package api
 
 import (
 	"context"
@@ -18,20 +18,19 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/portbound/go-fs/internal/middleware"
-	"github.com/portbound/go-fs/internal/models"
-	"github.com/portbound/go-fs/internal/services"
+	"github.com/portbound/go-fs/internal/user"
 	"github.com/portbound/go-fs/pkg/response"
 )
 
 type APIHandler struct {
-	fs     services.FileService
-	fms    services.FileMetaService
-	us     services.UserService
-	logger *slog.Logger
+	fileService services.FileService
+	fms         services.FileMetaService
+	userService user.Service
+	logger      *slog.Logger
 }
 
-func NewAPIHandler(fs services.FileService, fms services.FileMetaService, us services.UserService, logger *slog.Logger) *APIHandler {
-	return &APIHandler{fs: fs, fms: fms, us: us, logger: logger}
+func NewHandler(fs services.FileService, fms services.FileMetaService, us services.UserService, logger *slog.Logger) *APIHandler {
+	return &APIHandler{fileService: fs, fms: fms, userService: us, logger: logger}
 }
 
 func (h *APIHandler) RegisterRoutes(mux *http.ServeMux) {
@@ -72,7 +71,7 @@ func (h *APIHandler) handleUploadFile(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		name := filepath.Base(part.FileName())
+		// name := filepath.Base(part.FileName())
 		contentType := part.Header.Get("Content-Type")
 		metaType := strings.Split(contentType, "/")[0]
 		if metaType != "image" && metaType != "video" {
@@ -81,25 +80,26 @@ func (h *APIHandler) handleUploadFile(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
-		id := uuid.New().String()
-		path, _, err := h.fs.StageFileToDisk(r.Context(), id, part)
-		if err != nil {
-			logger.Error("failed to stage file to disk", "error", err, "id", id, "file_name", name)
-			batchErrs = errors.Join(batchErrs, fmt.Errorf("failed to upload file: '%s'", name))
-			continue
-		}
-		part.Close()
+		// id := uuid.New().String()
+		// path, _, err := h.fileService.StageFileToDisk(r.Context(), id, part)
+		// if err != nil {
+		// 	logger.Error("failed to stage file to disk", "error", err, "id", id, "file_name", name)
+		// 	batchErrs = errors.Join(batchErrs, fmt.Errorf("failed to upload file: '%s'", name))
+		// 	continue
+		// }
+		// part.Close()
 
-		fm := models.FileMeta{
-			ID:          id,
-			Name:        name,
-			ContentType: contentType,
-			Owner:       requester.Email,
-			TmpFilePath: path,
-		}
+		// fm := models.FileMeta{
+		// 	ID:          id,
+		// 	Name:        name,
+		// 	ContentType: contentType,
+		// 	Owner:       requester.Email,
+		// 	TmpFilePath: path,
+		// }
 
 		wg.Go(func() {
-			if err := h.fs.ProcessFile(r.Context(), &fm, requester); err != nil {
+			// if err := h.fileService.Upload(r.Context(), &fm, requester); err != nil {
+			if err := h.fileService.Upload(r.Context, part, requester)
 				logger.Error("file processing failed", "error", err, "id", id, "file_name", fm.Name)
 				select {
 				case ch <- err:
@@ -161,7 +161,7 @@ func (h *APIHandler) handleDownloadFile(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	fileReader, err := h.fs.DownloadFile(r.Context(), fm.ID, requester)
+	fileReader, err := h.fileService.DownloadFile(r.Context(), fm.ID, requester)
 	if err != nil {
 		logger.Error("failed to download file from storage", "error", err, "id", id)
 		response.WriteJSONError(w, http.StatusInternalServerError, fmt.Sprintf("failed to download file for id: '%s'", id))
@@ -241,11 +241,11 @@ func (h *APIHandler) handleDeleteFile(w http.ResponseWriter, r *http.Request) {
 	// TODO need to come up with a less brittle implementation to call here using the saga pattern or some sort of transaction
 	// For now I think it makes the most sense to simply delete everything on GCS first, and then if both files succeed we can remove file meta... That way we don't end up with orphaned files on GCS and no track record of them in the DB if the call to GCS fails
 	// Still super brittle but better for development I guess
-	if err := h.fs.DeleteFile(r.Context(), fm.ThumbID, requester); err != nil {
+	if err := h.fileService.DeleteFile(r.Context(), fm.ThumbID, requester); err != nil {
 		errs = errors.Join(errs, err)
 	}
 
-	if err := h.fs.DeleteFile(r.Context(), fm.ID, requester); err != nil {
+	if err := h.fileService.DeleteFile(r.Context(), fm.ID, requester); err != nil {
 		errs = errors.Join(errs, err)
 	}
 

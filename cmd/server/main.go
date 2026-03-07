@@ -9,10 +9,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/portbound/go-fs/internal/config"
-	"github.com/portbound/go-fs/internal/handlers"
-	"github.com/portbound/go-fs/internal/infrastructure/database/sqlite"
-	"github.com/portbound/go-fs/internal/infrastructure/storage/gcs"
+	"github.com/portbound/go-fs/internal/api"
 	"github.com/portbound/go-fs/internal/middleware"
 	"github.com/portbound/go-fs/internal/repositories"
 	"github.com/portbound/go-fs/internal/services"
@@ -20,7 +17,7 @@ import (
 )
 
 func main() {
-	cfg, err := config.Load()
+	cfg, err := Load()
 	if err != nil {
 		log.Fatalf("failed to load config: %v", err)
 	}
@@ -61,7 +58,7 @@ func main() {
 	webHandler.RegisterRoutes(mux)
 
 	apiMux := http.NewServeMux()
-	apiHandler := handlers.NewAPIHandler(fileService, fileMetaService, userService, errorLogger)
+	apiHandler := api.NewHandler(fileService, fileMetaService, userService, errorLogger)
 	apiHandler.RegisterRoutes(apiMux)
 
 	authMW := middleware.NewAuthMiddleware(authenticator, userService)
