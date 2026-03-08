@@ -1,4 +1,4 @@
-package web
+package user
 
 import (
 	"database/sql"
@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/portbound/go-fs/internal/services"
 	"github.com/portbound/go-fs/pkg/auth"
 	"github.com/portbound/go-fs/pkg/response"
 )
@@ -22,17 +21,17 @@ type LoginResponse struct {
 	JWT string `json:"jwt"`
 }
 
-type WebHandler struct {
-	userService   services.UserService
+type Handler struct {
+	service       *Service
 	authenticator *auth.Authenticator
 	logger        *slog.Logger
 }
 
-func NewWebHandler(a *auth.Authenticator, us services.UserService, logger *slog.Logger) *WebHandler {
-	return &WebHandler{authenticator: a, userService: us, logger: logger}
+func NewHandler(a *auth.Authenticator, s *Service, logger *slog.Logger) *Handler {
+	return &Handler{authenticator: a, service: s, logger: logger}
 }
 
-func (h *WebHandler) RegisterRoutes(mux *http.ServeMux) {
+func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /login", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "./web/public/login.html")
 	})
@@ -40,7 +39,7 @@ func (h *WebHandler) RegisterRoutes(mux *http.ServeMux) {
 
 }
 
-func (h *WebHandler) HandleLogin(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	logger := h.logger.With("handler", "handleLogin")
 
 	w.Header().Set("Access-Control-Allow-Origin", "*")
@@ -71,7 +70,7 @@ func (h *WebHandler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err = h.userService.LookupUser(r.Context(), requesterEmail)
+	_, err = h.userService.Get(r.Context(), requesterEmail)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			logger.Error("unauthorized login attempt", "error", err, "requester", requesterEmail)

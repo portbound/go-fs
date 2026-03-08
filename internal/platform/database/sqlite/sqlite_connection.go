@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	_ "github.com/mattn/go-sqlite3"
-	"github.com/portbound/go-fs/internal/database"
+	"github.com/portbound/go-fs/internal/platform/database"
 )
 
 //go:embed schema.sql

@@ -1,5 +1,4 @@
-// Package handlers
-package api
+package fs
 
 import (
 	"context"
@@ -15,19 +14,18 @@ import (
 	"sync"
 	"time"
 
-	"github.com/portbound/go-fs/internal/fs"
 	"github.com/portbound/go-fs/internal/middleware"
 	"github.com/portbound/go-fs/internal/user"
 	"github.com/portbound/go-fs/pkg/response"
 )
 
 type Handler struct {
-	fileService fs.Service
-	userService user.Service
+	fileService *Service
+	userService *user.Service
 	logger      *slog.Logger
 }
 
-func New(f fs.Service, u user.Service, logger *slog.Logger) *Handler {
+func NewHandler(f *Service, u *user.Service, logger *slog.Logger) *Handler {
 	return &Handler{fileService: f, userService: u, logger: logger}
 }
 
@@ -122,37 +120,23 @@ func (h *Handler) handleDownloadFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dbCtx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
-	defer cancel()
-	fm, err := h.fms.LookupFileMeta(dbCtx, id, requester)
+	contentType, reader, err := h.fileService.Download(r.Context(), id, requester)
 	if err != nil {
-		logger.Error("failed to fetch metadata for file", "error", err, "id", id)
 		if errors.Is(err, sql.ErrNoRows) {
 			response.WriteJSONError(w, http.StatusNotFound, fmt.Sprintf("file not found for id: '%s'", id))
 			return
 		}
-		response.WriteJSONError(w, http.StatusInternalServerError, fmt.Sprintf("failed to download file for id: '%s'", id))
+
+		response.WriteJSONError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	defer reader.Close()
 
-	if requester.Email != fm.Owner {
-		response.WriteJSONError(w, http.StatusForbidden, fmt.Sprintf("permission denied for user: '%s'", requester.Email))
-		return
-	}
-
-	fileReader, err := h.fileService.DownloadFile(r.Context(), fm.ID, requester)
-	if err != nil {
-		logger.Error("failed to download file from storage", "error", err, "id", id)
-		response.WriteJSONError(w, http.StatusInternalServerError, fmt.Sprintf("failed to download file for id: '%s'", id))
-		return
-	}
-	defer fileReader.Close()
-
-	w.Header().Set("Content-Type", fm.ContentType)
+	w.Header().Set("Content-Type", contentType)
 	w.WriteHeader(http.StatusOK)
 
-	if _, err := io.Copy(w, fileReader); err != nil {
-		logger.Error("failed to stream file to client", "error", err, "id", id)
+	if _, err := io.Copy(w, reader); err != nil {
+		logger.Error("stream file to client", "error", err, "id", id)
 		response.WriteJSONError(w, http.StatusInternalServerError, fmt.Sprintf("failed to download file for id: '%s'", id))
 	}
 }
