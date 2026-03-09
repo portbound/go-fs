@@ -3,11 +3,14 @@ package fs
 import (
 	"context"
 	"io"
+	"time"
+
+	"cloud.google.com/go/storage"
 )
 
 type BlobStore interface {
 	Upload(ctx context.Context, name string, bucket string, src io.Reader) (int64, int64, error)
-	Download(ctx context.Context, name string, bucket string) (io.ReadCloser, error)
+	Download(ctx context.Context, name string, bucket string) (*storage.ObjectAttrs, *storage.Reader, error)
 	Delete(ctx context.Context, name string, bucket string) error
 }
 
@@ -21,9 +24,24 @@ type Metadata struct {
 	Id            string `json:"id"`
 	FileName      string `json:"fileName"`
 	ThumbnailName string `json:"thumbnailName"`
-	ContentType   string `json:"type"`
-	Size          int64  `json:"size"`
-	Timestamp     int64  `json:"timestamp"`
 	UserId        string `json:"userId"`
 	DeletedAt     string `json:"deletedAt"`
+}
+
+type UploadRequest struct {
+	path        string
+	filename    string
+	contentType string
+}
+
+type UploadResult struct {
+	filename string
+	err      error
+}
+
+type DownloadResult struct {
+	reader      io.Reader
+	contentType string
+	size        int64
+	timestamp   time.Time
 }
