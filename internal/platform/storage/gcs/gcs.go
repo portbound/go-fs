@@ -20,7 +20,7 @@ type Gcs struct {
 
 func New(projectID string) (*Gcs, error) {
 	ctx := context.Background()
-	client, err := storage.NewClient(ctx)
+	client, err := storage.NewClient(ctx, storage.WithJSONReads())
 	if err != nil {
 		return nil, err
 	}
@@ -34,7 +34,7 @@ func (g *Gcs) Upload(ctx context.Context, name, bucket string, src io.Reader) er
 	if err != nil {
 		if !errors.Is(err, storage.ErrBucketNotExist) {
 			g.mu.Unlock()
-			return fmt.Errorf("get bucket %q metadata: %w", bucket, err)
+			return fmt.Errorf("get bucket %q attrs: %w", bucket, err)
 		}
 
 		attrs := &storage.BucketAttrs{
@@ -55,14 +55,14 @@ func (g *Gcs) Upload(ctx context.Context, name, bucket string, src io.Reader) er
 
 	obj := g.client.Bucket(bucket).Object(name)
 
-	wc := obj.NewWriter(ctx)
-	defer wc.Close()
+	w := obj.NewWriter(ctx)
+	defer w.Close()
 
 	ctx, cancel := context.WithTimeout(ctx, time.Second*180)
 	defer cancel()
 
-	if _, err := io.Copy(wc, src); err != nil {
-		return fmt.Errorf("stream file %q to bucket %q: %w", name, bucket, err)
+	if _, err := io.Copy(w, src); err != nil {
+		return fmt.Errorf("stream to bucket %q: %w", bucket, err)
 	}
 
 	return nil
@@ -74,17 +74,17 @@ func (g *Gcs) Download(ctx context.Context, name string, bucket string) (*storag
 	attrs, err := obj.Attrs(ctx)
 	if err != nil {
 		if errors.Is(err, storage.ErrObjectNotExist) {
-			return nil, nil, fs.ErrBlobNotExist
+			return nil, nil, fs.ErrMediaNotExist
 		}
-		return nil, nil, fmt.Errorf("get %q metadata: %w", name, err)
+		return nil, nil, fmt.Errorf("get file attrs: %w", err)
 	}
 
-	reader, err := obj.NewReader(ctx)
+	r, err := obj.NewReader(ctx)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("new file reader: %w", err)
 	}
 
-	return attrs, reader, nil
+	return attrs, r, nil
 }
 
 func (g *Gcs) Delete(ctx context.Context, name string, bucket string) error {
