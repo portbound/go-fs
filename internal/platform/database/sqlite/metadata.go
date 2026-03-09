@@ -12,9 +12,6 @@ func (db *SQLiteDB) Save(ctx context.Context, m *fs.Metadata) error {
 		ID:          m.Id,
 		FileName:    m.FileName,
 		ThumbName:   sql.NullString{String: m.ThumbnailName, Valid: true},
-		ContentType: m.ContentType,
-		Size:        m.Size,
-		Timestamp:   m.Timestamp,
 		UserID:      m.UserId,
 	}
 
@@ -36,9 +33,6 @@ func (db *SQLiteDB) Get(ctx context.Context, id, userId string) (*fs.Metadata, e
 		Id:            f.ID,
 		FileName:      f.FileName,
 		ThumbnailName: f.ThumbName.String,
-		ContentType:   f.ContentType,
-		Size:          f.Size,
-		Timestamp:     f.Timestamp,
 		UserId:        f.UserID,
 	}, nil
 }

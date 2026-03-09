@@ -27,7 +27,7 @@ func (q *Queries) DeleteMetadata(ctx context.Context, arg DeleteMetadataParams) 
 }
 
 const getMetadata = `-- name: GetMetadata :one
-SELECT id, file_name, thumb_name, content_type, size, timestamp, user_id, deleted_at FROM metadata 
+SELECT id, file_name, thumb_name, user_id, deleted_at FROM metadata 
 WHERE id = ? 
 AND user_id = ? LIMIT 1
 `
@@ -44,9 +44,6 @@ func (q *Queries) GetMetadata(ctx context.Context, arg GetMetadataParams) (Metad
 		&i.ID,
 		&i.FileName,
 		&i.ThumbName,
-		&i.ContentType,
-		&i.Size,
-		&i.Timestamp,
 		&i.UserID,
 		&i.DeletedAt,
 	)
@@ -67,20 +64,17 @@ func (q *Queries) GetUser(ctx context.Context, email string) (User, error) {
 
 const saveMetadata = `-- name: SaveMetadata :exec
 INSERT INTO metadata (
-	id, file_name, thumb_name, content_type, size, timestamp, user_id
+	id, file_name, thumb_name, user_id
 ) VALUES (
-	?, ?, ?, ?, ?, ?, ?
+	?, ?, ?, ?
 )
 `
 
 type SaveMetadataParams struct {
-	ID          string         `json:"id"`
-	FileName    string         `json:"file_name"`
-	ThumbName   sql.NullString `json:"thumb_name"`
-	ContentType string         `json:"content_type"`
-	Size        int64          `json:"size"`
-	Timestamp   int64          `json:"timestamp"`
-	UserID      string         `json:"user_id"`
+	ID        string         `json:"id"`
+	FileName  string         `json:"file_name"`
+	ThumbName sql.NullString `json:"thumb_name"`
+	UserID    string         `json:"user_id"`
 }
 
 func (q *Queries) SaveMetadata(ctx context.Context, arg SaveMetadataParams) error {
@@ -88,9 +82,6 @@ func (q *Queries) SaveMetadata(ctx context.Context, arg SaveMetadataParams) erro
 		arg.ID,
 		arg.FileName,
 		arg.ThumbName,
-		arg.ContentType,
-		arg.Size,
-		arg.Timestamp,
 		arg.UserID,
 	)
 	return err

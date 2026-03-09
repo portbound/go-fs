@@ -73,18 +73,24 @@ func (g *Gcs) Upload(ctx context.Context, fileName string, bucketName string, sr
 	return attrs.Size, attrs.Created.Unix(), nil
 }
 
-func (g *Gcs) Download(ctx context.Context, name string, bucket string) (io.ReadCloser, error) {
+func (g *Gcs) Download(ctx context.Context, name string, bucket string) (*storage.ObjectAttrs, *storage.Reader, error) {
 	obj := g.client.Bucket(bucket).Object(name)
 
-	r, err := obj.NewReader(ctx)
+	attrs, err := obj.Attrs(ctx)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return r, nil
+
+	reader, err := obj.NewReader(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return attrs, reader, nil
 }
 
 func (g *Gcs) Delete(ctx context.Context, name string, bucket string) error {
-	obj := g.client.Bucket(b).Object(name)
+	obj := g.client.Bucket(bucket).Object(name)
 
 	if err := obj.Delete(ctx); err != nil {
 		return err

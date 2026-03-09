@@ -9,14 +9,11 @@ import (
 )
 
 type Metadata struct {
-	ID          string         `json:"id"`
-	FileName    string         `json:"file_name"`
-	ThumbName   sql.NullString `json:"thumb_name"`
-	ContentType string         `json:"content_type"`
-	Size        int64          `json:"size"`
-	Timestamp   int64          `json:"timestamp"`
-	UserID      string         `json:"user_id"`
-	DeletedAt   sql.NullString `json:"deleted_at"`
+	ID        string         `json:"id"`
+	FileName  string         `json:"file_name"`
+	ThumbName sql.NullString `json:"thumb_name"`
+	UserID    string         `json:"user_id"`
+	DeletedAt sql.NullString `json:"deleted_at"`
 }
 
 type User struct {
