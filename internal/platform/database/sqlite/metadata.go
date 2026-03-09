@@ -36,15 +36,15 @@ func (db *SQLiteDB) Get(ctx context.Context, id, userId string) (*fs.Metadata, e
 	}, nil
 }
 
-func (db *SQLiteDB) GetAll(ctx context.Context, userId string) ([]*fs.Metadata, error) {
+func (db *SQLiteDB) GetAll(ctx context.Context, userId string) ([]fs.Metadata, error) {
 	rows, err := db.GetAllMetadata(ctx, userId)
 	if err != nil {
 		return nil, err
 	}
 
-	results := make([]*fs.Metadata, len(rows))
+	results := make([]fs.Metadata, len(rows))
 	for i, m := range rows {
-		results[i] = &fs.Metadata{
+		results[i] = fs.Metadata{
 			Id:        m.ID,
 			Filename:  m.FileName,
 			Thumbname: m.ThumbName,

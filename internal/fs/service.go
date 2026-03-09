@@ -23,8 +23,8 @@ type Service struct {
 	media MediaStore
 }
 
-func NewService(m MetaStore, b MediaStore, dir string) *Service {
-	return &Service{meta: m, media: b}
+func NewService(meta MetaStore, media MediaStore) *Service {
+	return &Service{meta: meta, media: media}
 }
 
 func (s *Service) Upload(ctx context.Context, requests <-chan UploadRequest) <-chan UploadResult {
@@ -32,34 +32,34 @@ func (s *Service) Upload(ctx context.Context, requests <-chan UploadRequest) <-c
 
 	go func() {
 		for request := range requests {
-			fileType := strings.Split(request.contentType, "/")[0]
+			fileType := strings.Split(request.ContentType, "/")[0]
 			if fileType != "image" && fileType != "video" {
 				results <- UploadResult{
-					filename: request.filename,
-					err:      ErrUnsupportedFileType,
+					Filename: request.Filename,
+					Err:      ErrUnsupportedFileType,
 				}
 				continue
 			}
 
 			dbReadCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 			defer cancel()
-			if _, err := s.meta.Get(dbReadCtx, request.filename, request.userId); err == nil {
+			if _, err := s.meta.Get(dbReadCtx, request.Filename, request.UserId); err == nil {
 				results <- UploadResult{
-					filename: request.filename,
-					err:      ErrFileExists,
+					Filename: request.Filename,
+					Err:      ErrFileExists,
 				}
 				continue
 			}
 
 			meta := Metadata{
 				Id:        uuid.New().String(),
-				Filename:  request.filename,
-				Thumbname: "thumb-" + request.filename,
-				UserId:    request.userId,
+				Filename:  request.Filename,
+				Thumbname: "thumb-" + request.Filename,
+				UserId:    request.UserId,
 			}
 
 			err := func() error {
-				f, err := stageFile(meta.Filename, request.reader)
+				f, err := stageFile(meta.Filename, request.Reader)
 				if err != nil {
 					return fmt.Errorf("stage file to disk: %w", err)
 				}
@@ -73,11 +73,11 @@ func (s *Service) Upload(ctx context.Context, requests <-chan UploadRequest) <-c
 
 				g, ctx := errgroup.WithContext(ctx)
 				g.Go(func() error {
-					return s.media.Upload(ctx, meta.Filename, request.bucket, f)
+					return s.media.Upload(ctx, meta.Filename, request.Bucket, f)
 				})
 
 				g.Go(func() error {
-					return s.media.Upload(ctx, meta.Thumbname, request.bucket, thumbReader)
+					return s.media.Upload(ctx, meta.Thumbname, request.Bucket, thumbReader)
 				})
 
 				return g.Wait()
@@ -85,8 +85,8 @@ func (s *Service) Upload(ctx context.Context, requests <-chan UploadRequest) <-c
 
 			if err != nil {
 				results <- UploadResult{
-					filename: request.filename,
-					err:      err,
+					Filename: request.Filename,
+					Err:      err,
 				}
 				continue
 			}
@@ -95,15 +95,15 @@ func (s *Service) Upload(ctx context.Context, requests <-chan UploadRequest) <-c
 			defer cancel()
 			if err := s.meta.Save(dbWriteCtx, &meta); err != nil {
 				results <- UploadResult{
-					filename: request.filename,
-					err:      fmt.Errorf("save metadata: %w", err),
+					Filename: request.Filename,
+					Err:      fmt.Errorf("save metadata: %w", err),
 				}
 				continue
 			}
 
 			results <- UploadResult{
-				filename: request.filename,
-				err:      nil,
+				Filename: request.Filename,
+				Err:      nil,
 			}
 		}
 	}()
@@ -115,33 +115,33 @@ func (s *Service) Download(ctx context.Context, request DownloadRequest) (*Downl
 	dbCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
 
-	metadata, err := s.meta.Get(dbCtx, request.fileId, request.userId)
+	metadata, err := s.meta.Get(dbCtx, request.FileId, request.UserId)
 	if err != nil {
 		return nil, fmt.Errorf("get metadata: %w", err)
 	}
 
-	if metadata.UserId != request.userId {
+	if metadata.UserId != request.UserId {
 		return nil, errors.New("unauthorized request")
 	}
 
-	attrs, reader, err := s.media.Download(ctx, request.fileId, request.bucket)
+	attrs, reader, err := s.media.Download(ctx, request.FileId, request.Bucket)
 	if err != nil {
 		if errors.Is(err, ErrMediaNotExist) {
 			return nil, ErrMediaCorrupted
 		}
 
-		return nil, fmt.Errorf("download media %q: %w", request.fileId, err)
+		return nil, fmt.Errorf("download media %q: %w", request.FileId, err)
 	}
 
 	return &DownloadResult{
-		reader:      reader,
-		contentType: attrs.ContentType,
-		size:        attrs.Size,
-		timestamp:   attrs.Created,
+		Reader:      reader,
+		ContentType: attrs.ContentType,
+		Size:        attrs.Size,
+		Timestamp:   attrs.Created,
 	}, nil
 }
 
-func (s *Service) GetMetadata(ctx context.Context, userId string) ([]*Metadata, error) {
+func (s *Service) GetMetadata(ctx context.Context, userId string) ([]Metadata, error) {
 	dbCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
 
@@ -149,11 +149,11 @@ func (s *Service) GetMetadata(ctx context.Context, userId string) ([]*Metadata, 
 }
 
 func (s *Service) Delete(ctx context.Context, request DeleteRequest) error {
-	if err := s.media.Delete(ctx, request.fileId, request.bucket); err != nil {
+	if err := s.media.Delete(ctx, request.FileId, request.Bucket); err != nil {
 		return fmt.Errorf("delete media: %w", err)
 	}
 
-	if err := s.meta.Delete(ctx, request.fileId, request.userId); err != nil {
+	if err := s.meta.Delete(ctx, request.FileId, request.UserId); err != nil {
 		return fmt.Errorf("delete metadata: %w", err)
 	}
 

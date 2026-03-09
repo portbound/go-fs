@@ -67,17 +67,17 @@ func (h *Handler) handleUploadFile(w http.ResponseWriter, r *http.Request) {
 		}
 
 		requests <- UploadRequest{
-			filename:    filepath.Base(part.FileName()),
-			contentType: part.Header.Get("Content-Type"),
-			reader:      part,
-			userId:      requester.Id,
-			bucket:      requester.Bucket,
+			Filename:    filepath.Base(part.FileName()),
+			ContentType: part.Header.Get("Content-Type"),
+			Reader:      part,
+			UserId:      requester.Id,
+			Bucket:      requester.Bucket,
 		}
 	}
 
 	var resultErrs error
 	for result := range results {
-		if result.err != nil {
+		if result.Err != nil {
 			resultErrs = errors.Join(resultErrs, err)
 		}
 	}
@@ -107,9 +107,9 @@ func (h *Handler) handleDownloadFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	request := DownloadRequest{
-		fileId: fileId,
-		userId: requester.Id,
-		bucket: requester.Bucket,
+		FileId: fileId,
+		UserId: requester.Id,
+		Bucket: requester.Bucket,
 	}
 
 	result, err := h.fs.Download(r.Context(), request)
@@ -130,12 +130,12 @@ func (h *Handler) handleDownloadFile(w http.ResponseWriter, r *http.Request) {
 		response.WriteJSONError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	defer result.reader.Close()
+	defer result.Reader.Close()
 
-	w.Header().Set("Content-Type", result.contentType)
+	w.Header().Set("Content-Type", result.ContentType)
 	w.WriteHeader(http.StatusOK)
 
-	if _, err := io.Copy(w, result.reader); err != nil {
+	if _, err := io.Copy(w, result.Reader); err != nil {
 		// TODO: log err
 		// failed to stream file to client
 		response.WriteJSONError(w, http.StatusInternalServerError, fmt.Sprintf("failed to download file for id: '%s'", fileId))
@@ -180,15 +180,15 @@ func (h *Handler) handleDeleteFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	request := DeleteRequest{
-		fileId: fileId,
-		userId: requester.Id,
-		bucket: requester.Bucket,
+		FileId: fileId,
+		UserId: requester.Id,
+		Bucket: requester.Bucket,
 	}
 
 	if err := h.fs.Delete(r.Context(), request); err != nil {
 		// TODO: log error
 		// failed to delete file
-		response.WriteJSONError(w, http.StatusInternalServerError, fmt.Sprintf("failed to delete file %q", request.fileId))
+		response.WriteJSONError(w, http.StatusInternalServerError, fmt.Sprintf("failed to delete file %q", request.FileId))
 		return
 	}
 }
