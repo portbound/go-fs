@@ -2,13 +2,11 @@ package main
 
 import (
 	"log"
-	"log/slog"
 	"net/http"
-	"os"
-	"path/filepath"
 
 	"github.com/portbound/go-fs/internal/config"
 	"github.com/portbound/go-fs/internal/fs"
+	"github.com/portbound/go-fs/internal/logging"
 	"github.com/portbound/go-fs/internal/middleware"
 	"github.com/portbound/go-fs/internal/platform/database/sqlite"
 	"github.com/portbound/go-fs/internal/platform/storage/gcs"
@@ -22,21 +20,10 @@ func main() {
 		log.Fatalf("failed to load config: %v", err)
 	}
 
-	accessLog, err := os.OpenFile(filepath.Join(cfg.LogDir, "access.log"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
+	logger, err := logging.New(cfg.LogDir)
 	if err != nil {
-		log.Fatal("create access log: %v", err)
+		log.Fatalf("set up logging: %v", err)
 	}
-	defer accessLog.Close()
-
-	errorLog, err := os.OpenFile(filepath.Join(cfg.LogDir, "error.log"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
-	if err != nil {
-		log.Fatal("create error log: %v", err)
-	}
-	defer errorLog.Close()
-
-	// TODO: I'm pretty sure slog supports multi-file writing now, so I can use the same logger to write to both the access and error log
-	accessLogger := slog.New(slog.NewJSONHandler(accessLog, &slog.HandlerOptions{Level: slog.LevelInfo}))
-	errorLogger := slog.New(slog.NewJSONHandler(errorLog, &slog.HandlerOptions{Level: slog.LevelInfo}))
 
 	sqlite, err := sqlite.NewSQLiteDB(cfg.DBConnStr)
 	if err != nil {
@@ -55,15 +42,15 @@ func main() {
 	fsService := fs.NewService(sqlite, gcs, cfg.TmpDir)
 
 	userMux := http.NewServeMux()
-	userHandler := user.NewHandler(authenticator, userService, errorLogger)
+	userHandler := user.NewHandler(authenticator, userService, logger)
 	userHandler.RegisterRoutes(userMux)
 
 	fsMux := http.NewServeMux()
-	fsHandler := fs.NewHandler(fsService, userService, errorLogger)
+	fsHandler := fs.NewHandler(fsService, logger)
 	fsHandler.RegisterRoutes(fsMux)
 
 	authMW := middleware.NewAuthMiddleware(authenticator, userService)
-	loggingMW := middleware.NewLoggingMiddleware(accessLogger)
+	loggingMW := middleware.New(logger)
 
 	switch cfg.Environment {
 	case "development":
