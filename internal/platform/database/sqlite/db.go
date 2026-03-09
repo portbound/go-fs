@@ -27,6 +27,9 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.deleteMetadataStmt, err = db.PrepareContext(ctx, deleteMetadata); err != nil {
 		return nil, fmt.Errorf("error preparing query DeleteMetadata: %w", err)
 	}
+	if q.getAllMetadataStmt, err = db.PrepareContext(ctx, getAllMetadata); err != nil {
+		return nil, fmt.Errorf("error preparing query GetAllMetadata: %w", err)
+	}
 	if q.getMetadataStmt, err = db.PrepareContext(ctx, getMetadata); err != nil {
 		return nil, fmt.Errorf("error preparing query GetMetadata: %w", err)
 	}
@@ -36,9 +39,6 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.saveMetadataStmt, err = db.PrepareContext(ctx, saveMetadata); err != nil {
 		return nil, fmt.Errorf("error preparing query SaveMetadata: %w", err)
 	}
-	if q.updateMetadataStmt, err = db.PrepareContext(ctx, updateMetadata); err != nil {
-		return nil, fmt.Errorf("error preparing query UpdateMetadata: %w", err)
-	}
 	return &q, nil
 }
 
@@ -47,6 +47,11 @@ func (q *Queries) Close() error {
 	if q.deleteMetadataStmt != nil {
 		if cerr := q.deleteMetadataStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing deleteMetadataStmt: %w", cerr)
+		}
+	}
+	if q.getAllMetadataStmt != nil {
+		if cerr := q.getAllMetadataStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing getAllMetadataStmt: %w", cerr)
 		}
 	}
 	if q.getMetadataStmt != nil {
@@ -62,11 +67,6 @@ func (q *Queries) Close() error {
 	if q.saveMetadataStmt != nil {
 		if cerr := q.saveMetadataStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing saveMetadataStmt: %w", cerr)
-		}
-	}
-	if q.updateMetadataStmt != nil {
-		if cerr := q.updateMetadataStmt.Close(); cerr != nil {
-			err = fmt.Errorf("error closing updateMetadataStmt: %w", cerr)
 		}
 	}
 	return err
@@ -109,10 +109,10 @@ type Queries struct {
 	db                 DBTX
 	tx                 *sql.Tx
 	deleteMetadataStmt *sql.Stmt
+	getAllMetadataStmt *sql.Stmt
 	getMetadataStmt    *sql.Stmt
 	getUserStmt        *sql.Stmt
 	saveMetadataStmt   *sql.Stmt
-	updateMetadataStmt *sql.Stmt
 }
 
 func (q *Queries) WithTx(tx *sql.Tx) *Queries {
@@ -120,9 +120,9 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		db:                 tx,
 		tx:                 tx,
 		deleteMetadataStmt: q.deleteMetadataStmt,
+		getAllMetadataStmt: q.getAllMetadataStmt,
 		getMetadataStmt:    q.getMetadataStmt,
 		getUserStmt:        q.getUserStmt,
 		saveMetadataStmt:   q.saveMetadataStmt,
-		updateMetadataStmt: q.updateMetadataStmt,
 	}
 }

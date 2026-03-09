@@ -4,16 +4,11 @@
 
 package sqlite
 
-import (
-	"database/sql"
-)
-
 type Metadata struct {
-	ID        string         `json:"id"`
-	FileName  string         `json:"file_name"`
-	ThumbName sql.NullString `json:"thumb_name"`
-	UserID    string         `json:"user_id"`
-	DeletedAt sql.NullString `json:"deleted_at"`
+	ID        string `json:"id"`
+	FileName  string `json:"file_name"`
+	ThumbName string `json:"thumb_name"`
+	UserID    string `json:"user_id"`
 }
 
 type User struct {

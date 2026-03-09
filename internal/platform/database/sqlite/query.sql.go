@@ -7,7 +7,6 @@ package sqlite
 
 import (
 	"context"
-	"database/sql"
 )
 
 const deleteMetadata = `-- name: DeleteMetadata :exec
@@ -26,8 +25,41 @@ func (q *Queries) DeleteMetadata(ctx context.Context, arg DeleteMetadataParams) 
 	return err
 }
 
+const getAllMetadata = `-- name: GetAllMetadata :many
+SELECT id, file_name, thumb_name, user_id FROM metadata 
+WHERE user_id = ?
+`
+
+func (q *Queries) GetAllMetadata(ctx context.Context, userID string) ([]Metadata, error) {
+	rows, err := q.query(ctx, q.getAllMetadataStmt, getAllMetadata, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Metadata
+	for rows.Next() {
+		var i Metadata
+		if err := rows.Scan(
+			&i.ID,
+			&i.FileName,
+			&i.ThumbName,
+			&i.UserID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getMetadata = `-- name: GetMetadata :one
-SELECT id, file_name, thumb_name, user_id, deleted_at FROM metadata 
+SELECT id, file_name, thumb_name, user_id FROM metadata 
 WHERE id = ? 
 AND user_id = ? LIMIT 1
 `
@@ -45,7 +77,6 @@ func (q *Queries) GetMetadata(ctx context.Context, arg GetMetadataParams) (Metad
 		&i.FileName,
 		&i.ThumbName,
 		&i.UserID,
-		&i.DeletedAt,
 	)
 	return i, err
 }
@@ -71,10 +102,10 @@ INSERT INTO metadata (
 `
 
 type SaveMetadataParams struct {
-	ID        string         `json:"id"`
-	FileName  string         `json:"file_name"`
-	ThumbName sql.NullString `json:"thumb_name"`
-	UserID    string         `json:"user_id"`
+	ID        string `json:"id"`
+	FileName  string `json:"file_name"`
+	ThumbName string `json:"thumb_name"`
+	UserID    string `json:"user_id"`
 }
 
 func (q *Queries) SaveMetadata(ctx context.Context, arg SaveMetadataParams) error {
@@ -84,21 +115,5 @@ func (q *Queries) SaveMetadata(ctx context.Context, arg SaveMetadataParams) erro
 		arg.ThumbName,
 		arg.UserID,
 	)
-	return err
-}
-
-const updateMetadata = `-- name: UpdateMetadata :exec
-UPDATE metadata
-SET deleted_at = ?
-WHERE id = ?
-`
-
-type UpdateMetadataParams struct {
-	DeletedAt sql.NullString `json:"deleted_at"`
-	ID        string         `json:"id"`
-}
-
-func (q *Queries) UpdateMetadata(ctx context.Context, arg UpdateMetadataParams) error {
-	_, err := q.exec(ctx, q.updateMetadataStmt, updateMetadata, arg.DeletedAt, arg.ID)
 	return err
 }

@@ -19,12 +19,12 @@ import (
 )
 
 type Service struct {
-	meta MetaStore
-	blob BlobStore
+	meta  MetaStore
+	media MediaStore
 }
 
-func NewService(m MetaStore, b BlobStore, dir string) *Service {
-	return &Service{meta: m, blob: b}
+func NewService(m MetaStore, b MediaStore, dir string) *Service {
+	return &Service{meta: m, media: b}
 }
 
 func (s *Service) Upload(ctx context.Context, requests <-chan UploadRequest) <-chan UploadResult {
@@ -59,7 +59,7 @@ func (s *Service) Upload(ctx context.Context, requests <-chan UploadRequest) <-c
 			}
 
 			err := func() error {
-				f, err := stageFile(ctx, meta.Filename, request.reader)
+				f, err := stageFile(meta.Filename, request.reader)
 				if err != nil {
 					return fmt.Errorf("stage file to disk: %w", err)
 				}
@@ -73,11 +73,11 @@ func (s *Service) Upload(ctx context.Context, requests <-chan UploadRequest) <-c
 
 				g, ctx := errgroup.WithContext(ctx)
 				g.Go(func() error {
-					return s.blob.Upload(ctx, meta.Filename, request.bucket, f)
+					return s.media.Upload(ctx, meta.Filename, request.bucket, f)
 				})
 
 				g.Go(func() error {
-					return s.blob.Upload(ctx, meta.Thumbname, request.bucket, thumbReader)
+					return s.media.Upload(ctx, meta.Thumbname, request.bucket, thumbReader)
 				})
 
 				return g.Wait()
@@ -115,7 +115,7 @@ func (s *Service) Download(ctx context.Context, request DownloadRequest) (*Downl
 	dbCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
 
-	metadata, err := s.meta.Get(dbCtx, request.filename, request.userId)
+	metadata, err := s.meta.Get(dbCtx, request.fileId, request.userId)
 	if err != nil {
 		return nil, fmt.Errorf("get metadata: %w", err)
 	}
@@ -124,18 +124,13 @@ func (s *Service) Download(ctx context.Context, request DownloadRequest) (*Downl
 		return nil, errors.New("unauthorized request")
 	}
 
-	attrs, reader, err := s.blob.Download(ctx, request.filename, request.bucket)
+	attrs, reader, err := s.media.Download(ctx, request.fileId, request.bucket)
 	if err != nil {
-		if errors.Is(err, ErrBlobNotExist) {
-			dbCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
-			defer cancel()
-
-			if err := s.meta.Delete(dbCtx, request.filename, request.userId); err != nil {
-				return nil, fmt.Errorf("delete metadata for orphaned object: %w")
-			}
+		if errors.Is(err, ErrMediaNotExist) {
+			return nil, ErrMediaCorrupted
 		}
 
-		return nil, fmt.Errorf("download blob %q: %w", request.filename, err)
+		return nil, fmt.Errorf("download media %q: %w", request.fileId, err)
 	}
 
 	return &DownloadResult{
@@ -146,19 +141,26 @@ func (s *Service) Download(ctx context.Context, request DownloadRequest) (*Downl
 	}, nil
 }
 
+func (s *Service) GetMetadata(ctx context.Context, userId string) ([]*Metadata, error) {
+	dbCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+
+	return s.meta.GetAll(dbCtx, userId)
+}
+
 func (s *Service) Delete(ctx context.Context, request DeleteRequest) error {
-	if err := s.blob.Delete(ctx, request.filename, request.bucket); err != nil {
-		return fmt.Errorf("delete blob: %w", err)
+	if err := s.media.Delete(ctx, request.fileId, request.bucket); err != nil {
+		return fmt.Errorf("delete media: %w", err)
 	}
 
-	if err := s.meta.Delete(ctx, request.filename, request.userId); err != nil {
+	if err := s.meta.Delete(ctx, request.fileId, request.userId); err != nil {
 		return fmt.Errorf("delete metadata: %w", err)
 	}
 
 	return nil
 }
 
-func stageFile(ctx context.Context, name string, r io.Reader) (*os.File, error) {
+func stageFile(name string, r io.Reader) (*os.File, error) {
 	f, err := os.CreateTemp("", name)
 	if err != nil {
 		return nil, fmt.Errorf("create temp file: %w", err)

@@ -10,10 +10,10 @@ import (
 
 type Querier interface {
 	DeleteMetadata(ctx context.Context, arg DeleteMetadataParams) error
+	GetAllMetadata(ctx context.Context, userID string) ([]Metadata, error)
 	GetMetadata(ctx context.Context, arg GetMetadataParams) (Metadata, error)
 	GetUser(ctx context.Context, email string) (User, error)
 	SaveMetadata(ctx context.Context, arg SaveMetadataParams) error
-	UpdateMetadata(ctx context.Context, arg UpdateMetadataParams) error
 }
 
 var _ Querier = (*Queries)(nil)

@@ -7,8 +7,7 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE TABLE IF NOT EXISTS metadata (
 		id TEXT NOT NULL PRIMARY KEY, 
 		file_name TEXT NOT NULL, 
-		thumb_name TEXT,
+		thumb_name TEXT NOT NULL,
 		user_id TEXT NOT NULL,
-		deleted_at TEXT,
 		UNIQUE (name, owner)
 );

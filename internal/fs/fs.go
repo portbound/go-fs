@@ -9,7 +9,7 @@ import (
 	"cloud.google.com/go/storage"
 )
 
-type BlobStore interface {
+type MediaStore interface {
 	Upload(ctx context.Context, name, bucket string, src io.Reader) error
 	Download(ctx context.Context, name, bucket string) (*storage.ObjectAttrs, *storage.Reader, error)
 	Delete(ctx context.Context, name, bucket string) error
@@ -18,6 +18,7 @@ type BlobStore interface {
 type MetaStore interface {
 	Save(ctx context.Context, meta *Metadata) error
 	Get(ctx context.Context, fileId, userId string) (*Metadata, error)
+	GetAll(ctx context.Context, userId string) ([]*Metadata, error)
 	Delete(ctx context.Context, fileId, userId string) error
 }
 
@@ -26,7 +27,6 @@ type Metadata struct {
 	Filename  string `json:"filename"`
 	Thumbname string `json:"thumbname"`
 	UserId    string `json:"user_id"`
-	DeletedAt string `json:"deleted_at"`
 }
 
 type UploadRequest struct {
@@ -43,9 +43,9 @@ type UploadResult struct {
 }
 
 type DownloadRequest struct {
-	filename string
-	userId   string
-	bucket   string
+	fileId string
+	userId string
+	bucket string
 }
 
 type DownloadResult struct {
@@ -56,16 +56,16 @@ type DownloadResult struct {
 }
 
 type DeleteRequest struct {
-	filename string
-	userId   string
-	bucket   string
+	fileId string
+	userId string
+	bucket string
 }
 
 var (
 	ErrFileExists          = errors.New("file already exists")
 	ErrOrphanedFile        = errors.New("CRITICAL - orphaned file")
-	ErrMetaNotFound        = errors.New("")
-	ErrBlobNotExist        = errors.New("file not found in storage")
+	ErrMediaNotExist       = errors.New("file not found in storage")
+	ErrMediaCorrupted      = errors.New("one or more parts of the file are missing/corrupted")
 	ErrUserUnauthorzied    = errors.New("user ")
 	ErrUnsupportedFileType = errors.New("unsupported file type")
 )

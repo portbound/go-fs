@@ -1,7 +1,6 @@
 package fs
 
 import (
-	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -11,7 +10,6 @@ import (
 	"mime/multipart"
 	"net/http"
 	"path/filepath"
-	"time"
 
 	"github.com/portbound/go-fs/internal/middleware"
 	"github.com/portbound/go-fs/internal/user"
@@ -19,17 +17,17 @@ import (
 )
 
 type Handler struct {
-	fileService *Service
-	logger      *slog.Logger
+	fs     *Service
+	logger *slog.Logger
 }
 
 func NewHandler(f *Service, logger *slog.Logger) *Handler {
-	return &Handler{fileService: f, logger: logger}
+	return &Handler{fs: f, logger: logger}
 }
 
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /files", h.handleUploadFile)
-	mux.HandleFunc("GET /files", h.handleFetchFileMeta)
+	mux.HandleFunc("GET /files", h.handleGetMetadata)
 	mux.HandleFunc("GET /files/{id}", h.handleDownloadFile)
 	mux.HandleFunc("DELETE /files/{id}", h.handleDeleteFile)
 }
@@ -53,7 +51,7 @@ func (h *Handler) handleUploadFile(w http.ResponseWriter, r *http.Request) {
 
 	reader := multipart.NewReader(r.Body, params["boundary"])
 	requests := make(chan UploadRequest)
-	results := h.fileService.Upload(r.Context(), requests, requester)
+	results := h.fs.Upload(r.Context(), requests)
 
 	for {
 		part, err := reader.NextPart()
@@ -69,21 +67,23 @@ func (h *Handler) handleUploadFile(w http.ResponseWriter, r *http.Request) {
 		}
 
 		requests <- UploadRequest{
-			path:        path,
 			filename:    filepath.Base(part.FileName()),
 			contentType: part.Header.Get("Content-Type"),
+			reader:      part,
+			userId:      requester.Id,
+			bucket:      requester.Bucket,
 		}
 	}
 
-	var errs error
+	var resultErrs error
 	for result := range results {
 		if result.err != nil {
-			errs = errors.Join(errs, err)
+			resultErrs = errors.Join(resultErrs, err)
 		}
 	}
 
-	if errs != nil {
-		response.WriteJSON(w, http.StatusMultiStatus, errs.Error())
+	if resultErrs != nil {
+		response.WriteJSON(w, http.StatusMultiStatus, resultErrs.Error())
 		return
 	}
 
@@ -100,16 +100,30 @@ func (h *Handler) handleDownloadFile(w http.ResponseWriter, r *http.Request) {
 	}
 	logger = logger.With("requester", requester.Email)
 
-	id := r.PathValue("id")
-	if id == "" {
+	fileId := r.PathValue("id")
+	if fileId == "" {
 		response.WriteJSONError(w, http.StatusBadRequest, "file id missing from request")
 		return
 	}
 
-	result, err := h.fileService.Download(r.Context(), id, requester)
+	request := DownloadRequest{
+		fileId: fileId,
+		userId: requester.Id,
+		bucket: requester.Bucket,
+	}
+
+	result, err := h.fs.Download(r.Context(), request)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			response.WriteJSONError(w, http.StatusNotFound, fmt.Sprintf("file not found for id: '%s'", id))
+			// TODO: log error
+			response.WriteJSONError(w, http.StatusNotFound, fmt.Sprintf("file not found for id: %q", fileId))
+			return
+		}
+
+		if errors.Is(err, ErrMediaCorrupted) {
+			// TODO: log error
+			// orphaned data needs cleanup
+			response.WriteJSONError(w, http.StatusInternalServerError, fmt.Sprintf("%v: %q", err.Error(), fileId))
 			return
 		}
 
@@ -118,18 +132,19 @@ func (h *Handler) handleDownloadFile(w http.ResponseWriter, r *http.Request) {
 	}
 	defer result.reader.Close()
 
-	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("Content-Type", result.contentType)
 	w.WriteHeader(http.StatusOK)
 
-	if _, err := io.Copy(w, reader); err != nil {
-		logger.Error("stream file to client", "error", err, "id", id)
-		response.WriteJSONError(w, http.StatusInternalServerError, fmt.Sprintf("failed to download file for id: '%s'", id))
+	if _, err := io.Copy(w, result.reader); err != nil {
+		// TODO: log err
+		// failed to stream file to client
+		response.WriteJSONError(w, http.StatusInternalServerError, fmt.Sprintf("failed to download file for id: '%s'", fileId))
 	}
 }
 
-func (h *Handler) handleFetchFileMeta(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) handleGetMetadata(w http.ResponseWriter, r *http.Request) {
 	logger := h.logger.With("handler", "handleFetchFileMeta")
-	requester, ok := r.Context().Value(middleware.RequesterKey).(*models.User)
+	requester, ok := r.Context().Value(middleware.RequesterKey).(*user.User)
 	if !ok {
 		logger.Warn("unauthorized request: user not found in context")
 		response.WriteJSONError(w, http.StatusUnauthorized, "unauthorized: user is missing from request")
@@ -137,19 +152,15 @@ func (h *Handler) handleFetchFileMeta(w http.ResponseWriter, r *http.Request) {
 	}
 	logger = logger.With("requester", requester.Email)
 
-	dbCtx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
-	defer cancel()
-	afm, err := h.fms.LookupAllFileMeta(dbCtx, requester)
+	metadata, err := h.fs.GetMetadata(r.Context(), requester.Id)
 	if err != nil {
-		logger.Error("failed to fetch metadata for requester", "error", err)
-		if errors.Is(err, sql.ErrNoRows) {
-			return
-		}
-		response.WriteJSONError(w, http.StatusInternalServerError, "failed to fetch file metadata")
+		// TODO: log err
+		// failed to retrieve metadata for requester
+		response.WriteJSONError(w, http.StatusInternalServerError, fmt.Sprintf("failed to fetch metadata for user %q", requester.Id))
 		return
 	}
 
-	response.WriteJSON(w, http.StatusOK, afm)
+	response.WriteJSON(w, http.StatusOK, metadata)
 }
 
 func (h *Handler) handleDeleteFile(w http.ResponseWriter, r *http.Request) {
@@ -162,15 +173,22 @@ func (h *Handler) handleDeleteFile(w http.ResponseWriter, r *http.Request) {
 	}
 	logger = logger.With("requester", requester.Email)
 
-	id := r.PathValue("id")
-	if id == "" {
+	fileId := r.PathValue("id")
+	if fileId == "" {
 		response.WriteJSONError(w, http.StatusBadRequest, "file id missing from request")
 		return
 	}
 
-	if err := h.fileService.Delete(r.Context(), id, requester); err != nil {
-		if errors.Is(err, ErrOrphanedData) {
-			logger.Error("error", err)
-		}
+	request := DeleteRequest{
+		fileId: fileId,
+		userId: requester.Id,
+		bucket: requester.Bucket,
+	}
+
+	if err := h.fs.Delete(r.Context(), request); err != nil {
+		// TODO: log error
+		// failed to delete file
+		response.WriteJSONError(w, http.StatusInternalServerError, fmt.Sprintf("failed to delete file %q", request.fileId))
+		return
 	}
 }

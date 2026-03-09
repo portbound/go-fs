@@ -2,7 +2,6 @@ package sqlite
 
 import (
 	"context"
-	"database/sql"
 
 	"github.com/portbound/go-fs/internal/fs"
 )
@@ -11,7 +10,7 @@ func (db *SQLiteDB) Save(ctx context.Context, m *fs.Metadata) error {
 	params := SaveMetadataParams{
 		ID:        m.Id,
 		FileName:  m.Filename,
-		ThumbName: sql.NullString{String: m.Thumbname, Valid: true},
+		ThumbName: m.Thumbname,
 		UserID:    m.UserId,
 	}
 
@@ -24,20 +23,37 @@ func (db *SQLiteDB) Get(ctx context.Context, id, userId string) (*fs.Metadata, e
 		UserID: userId,
 	}
 
-	f, err := db.Queries.GetMetadata(ctx, params)
+	m, err := db.Queries.GetMetadata(ctx, params)
 	if err != nil {
 		return nil, err
 	}
 
 	return &fs.Metadata{
-		Id:        f.ID,
-		Filename:  f.FileName,
-		Thumbname: f.ThumbName.String,
-		UserId:    f.UserID,
+		Id:        m.ID,
+		Filename:  m.FileName,
+		Thumbname: m.ThumbName,
+		UserId:    m.UserID,
 	}, nil
 }
 
-func (db *SQLiteDB) Update(ctx context.Context, id, email string)
+func (db *SQLiteDB) GetAll(ctx context.Context, userId string) ([]*fs.Metadata, error) {
+	rows, err := db.GetAllMetadata(ctx, userId)
+	if err != nil {
+		return nil, err
+	}
+
+	results := make([]*fs.Metadata, len(rows))
+	for i, m := range rows {
+		results[i] = &fs.Metadata{
+			Id:        m.ID,
+			Filename:  m.FileName,
+			Thumbname: m.ThumbName,
+			UserId:    m.UserID,
+		}
+	}
+
+	return results, nil
+}
 
 func (db *SQLiteDB) Delete(ctx context.Context, id, email string) error {
 	params := DeleteMetadataParams{
