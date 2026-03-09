@@ -10,8 +10,7 @@ import (
 	"mime"
 	"mime/multipart"
 	"net/http"
-	"strings"
-	"sync"
+	"path/filepath"
 	"time"
 
 	"github.com/portbound/go-fs/internal/middleware"
@@ -21,12 +20,11 @@ import (
 
 type Handler struct {
 	fileService *Service
-	userService *user.Service
 	logger      *slog.Logger
 }
 
-func NewHandler(f *Service, u *user.Service, logger *slog.Logger) *Handler {
-	return &Handler{fileService: f, userService: u, logger: logger}
+func NewHandler(f *Service, logger *slog.Logger) *Handler {
+	return &Handler{fileService: f, logger: logger}
 }
 
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
@@ -40,7 +38,8 @@ func (h *Handler) handleUploadFile(w http.ResponseWriter, r *http.Request) {
 	logger := h.logger.With("handler", "handleUploadFile")
 	requester, ok := r.Context().Value(middleware.RequesterKey).(*user.User)
 	if !ok {
-		logger.Error("unauthorized request: user not found in context")
+		// TODO: log
+		// unauthorized, user not found in context
 		response.WriteJSONError(w, http.StatusUnauthorized, "unauthorized: user is missing from request")
 		return
 	}
@@ -52,52 +51,39 @@ func (h *Handler) handleUploadFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var batchErrs error
-	var wg sync.WaitGroup
-	ch := make(chan error)
 	reader := multipart.NewReader(r.Body, params["boundary"])
+	requests := make(chan UploadRequest)
+	results := h.fileService.Upload(r.Context(), requests, requester)
+
 	for {
 		part, err := reader.NextPart()
 		if err != nil {
 			if err == io.EOF {
+				close(requests)
 				break
 			}
-			logger.Error("failed to parse incoming request", "error", err)
+			// TODO: log
+			// failed to parse incoming request
 			response.WriteJSONError(w, http.StatusInternalServerError, "request failed")
 			return
 		}
 
-		contentType := part.Header.Get("Content-Type")
-		metaType := strings.Split(contentType, "/")[0]
-		if metaType != "image" && metaType != "video" {
-			logger.Error("unsupported file type", "file_name", name)
-			batchErrs = errors.Join(batchErrs, fmt.Errorf("unsupported file type: '%s'", name))
-			continue
+		requests <- UploadRequest{
+			path:        path,
+			filename:    filepath.Base(part.FileName()),
+			contentType: part.Header.Get("Content-Type"),
 		}
-
-		wg.Go(func() {
-			if err := h.fileService.Upload(r.Context, part, metadata, part, requester.Email); err != nil {
-				logger.Error("file processing failed", "error", err, "id", id, "file_name", fm.Name)
-				select {
-				case ch <- err:
-				case <-r.Context().Done():
-				}
-			}
-		})
 	}
 
-	go func() {
-		wg.Wait()
-		close(ch)
-	}()
-
-	for err := range ch {
-		batchErrs = errors.Join(batchErrs, err)
+	var errs error
+	for result := range results {
+		if result.err != nil {
+			errs = errors.Join(errs, err)
+		}
 	}
 
-	if batchErrs != nil {
-		// err = errors.Join(err, batchErrs)
-		response.WriteJSON(w, http.StatusMultiStatus, batchErrs.Error())
+	if errs != nil {
+		response.WriteJSON(w, http.StatusMultiStatus, errs.Error())
 		return
 	}
 
@@ -120,7 +106,7 @@ func (h *Handler) handleDownloadFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	contentType, reader, err := h.fileService.Download(r.Context(), id, requester)
+	result, err := h.fileService.Download(r.Context(), id, requester)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			response.WriteJSONError(w, http.StatusNotFound, fmt.Sprintf("file not found for id: '%s'", id))
@@ -130,7 +116,7 @@ func (h *Handler) handleDownloadFile(w http.ResponseWriter, r *http.Request) {
 		response.WriteJSONError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	defer reader.Close()
+	defer result.reader.Close()
 
 	w.Header().Set("Content-Type", contentType)
 	w.WriteHeader(http.StatusOK)
@@ -170,7 +156,7 @@ func (h *Handler) handleDeleteFile(w http.ResponseWriter, r *http.Request) {
 	logger := h.logger.With("handler", "handleDeleteFile")
 	requester, ok := r.Context().Value(middleware.RequesterKey).(*user.User)
 	if !ok {
-		logger.Warn("unauthorized request: user not found in context")
+		logger.Info("unauthorized request: user not found in context")
 		response.WriteJSONError(w, http.StatusUnauthorized, "unauthorized: user is missing from request")
 		return
 	}
@@ -183,5 +169,8 @@ func (h *Handler) handleDeleteFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.fileService.Delete(r.Context(), id, requester); err != nil {
+		if errors.Is(err, ErrOrphanedData) {
+			logger.Error("error", err)
+		}
 	}
 }

@@ -2,6 +2,7 @@ package fs
 
 import (
 	"context"
+	"errors"
 	"io"
 	"time"
 
@@ -9,9 +10,9 @@ import (
 )
 
 type BlobStore interface {
-	Upload(ctx context.Context, name string, bucket string, src io.Reader) (int64, int64, error)
-	Download(ctx context.Context, name string, bucket string) (*storage.ObjectAttrs, *storage.Reader, error)
-	Delete(ctx context.Context, name string, bucket string) error
+	Upload(ctx context.Context, name, bucket string, src io.Reader) error
+	Download(ctx context.Context, name, bucket string) (*storage.ObjectAttrs, *storage.Reader, error)
+	Delete(ctx context.Context, name, bucket string) error
 }
 
 type MetaStore interface {
@@ -21,17 +22,19 @@ type MetaStore interface {
 }
 
 type Metadata struct {
-	Id            string `json:"id"`
-	FileName      string `json:"fileName"`
-	ThumbnailName string `json:"thumbnailName"`
-	UserId        string `json:"userId"`
-	DeletedAt     string `json:"deletedAt"`
+	Id        string `json:"id"`
+	Filename  string `json:"filename"`
+	Thumbname string `json:"thumbname"`
+	UserId    string `json:"user_id"`
+	DeletedAt string `json:"deleted_at"`
 }
 
 type UploadRequest struct {
-	path        string
+	reader      io.ReadCloser
 	filename    string
 	contentType string
+	userId      string
+	bucket      string
 }
 
 type UploadResult struct {
@@ -39,9 +42,30 @@ type UploadResult struct {
 	err      error
 }
 
+type DownloadRequest struct {
+	filename string
+	userId   string
+	bucket   string
+}
+
 type DownloadResult struct {
-	reader      io.Reader
+	reader      io.ReadCloser
 	contentType string
 	size        int64
 	timestamp   time.Time
 }
+
+type DeleteRequest struct {
+	filename string
+	userId   string
+	bucket   string
+}
+
+var (
+	ErrFileExists          = errors.New("file already exists")
+	ErrOrphanedFile        = errors.New("CRITICAL - orphaned file")
+	ErrMetaNotFound        = errors.New("")
+	ErrBlobNotExist        = errors.New("file not found in storage")
+	ErrUserUnauthorzied    = errors.New("user ")
+	ErrUnsupportedFileType = errors.New("unsupported file type")
+)

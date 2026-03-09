@@ -3,11 +3,13 @@ package gcs
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"sync"
 	"time"
 
 	"cloud.google.com/go/storage"
+	"github.com/portbound/go-fs/internal/fs"
 )
 
 type Gcs struct {
@@ -25,14 +27,14 @@ func New(projectID string) (*Gcs, error) {
 	return &Gcs{client: client, projectID: projectID, mu: sync.Mutex{}}, nil
 }
 
-func (g *Gcs) Upload(ctx context.Context, fileName string, bucketName string, src io.Reader) (int64, int64, error) {
-	bkt := g.client.Bucket(bucketName)
+func (g *Gcs) Upload(ctx context.Context, name, bucket string, src io.Reader) error {
+	bkt := g.client.Bucket(bucket)
 	g.mu.Lock()
 	_, err := bkt.Attrs(ctx)
 	if err != nil {
 		if !errors.Is(err, storage.ErrBucketNotExist) {
 			g.mu.Unlock()
-			return 0, 0, err
+			return fmt.Errorf("get bucket %q metadata: %w", bucket, err)
 		}
 
 		attrs := &storage.BucketAttrs{
@@ -46,31 +48,24 @@ func (g *Gcs) Upload(ctx context.Context, fileName string, bucketName string, sr
 
 		if err := bkt.Create(ctx, g.projectID, attrs); err != nil {
 			g.mu.Unlock()
-			return 0, 0, err
+			return fmt.Errorf("create bucket %q: %w", bucket, err)
 		}
 	}
 	g.mu.Unlock()
 
-	obj := g.client.Bucket(bucketName).Object(fileName)
+	obj := g.client.Bucket(bucket).Object(name)
+
 	wc := obj.NewWriter(ctx)
+	defer wc.Close()
 
 	ctx, cancel := context.WithTimeout(ctx, time.Second*180)
 	defer cancel()
 
 	if _, err := io.Copy(wc, src); err != nil {
-		return 0, 0, err
+		return fmt.Errorf("stream file %q to bucket %q: %w", name, bucket, err)
 	}
 
-	if err := wc.Close(); err != nil {
-		return 0, 0, err
-	}
-
-	attrs, err := obj.Attrs(ctx)
-	if err != nil {
-		return 0, 0, err
-	}
-
-	return attrs.Size, attrs.Created.Unix(), nil
+	return nil
 }
 
 func (g *Gcs) Download(ctx context.Context, name string, bucket string) (*storage.ObjectAttrs, *storage.Reader, error) {
@@ -78,7 +73,10 @@ func (g *Gcs) Download(ctx context.Context, name string, bucket string) (*storag
 
 	attrs, err := obj.Attrs(ctx)
 	if err != nil {
-		return nil, nil, err
+		if errors.Is(err, storage.ErrObjectNotExist) {
+			return nil, nil, fs.ErrBlobNotExist
+		}
+		return nil, nil, fmt.Errorf("get %q metadata: %w", name, err)
 	}
 
 	reader, err := obj.NewReader(ctx)

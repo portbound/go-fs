@@ -9,10 +9,10 @@ import (
 
 func (db *SQLiteDB) Save(ctx context.Context, m *fs.Metadata) error {
 	params := SaveMetadataParams{
-		ID:          m.Id,
-		FileName:    m.FileName,
-		ThumbName:   sql.NullString{String: m.ThumbnailName, Valid: true},
-		UserID:      m.UserId,
+		ID:        m.Id,
+		FileName:  m.Filename,
+		ThumbName: sql.NullString{String: m.Thumbname, Valid: true},
+		UserID:    m.UserId,
 	}
 
 	return db.Queries.SaveMetadata(ctx, params)
@@ -30,10 +30,10 @@ func (db *SQLiteDB) Get(ctx context.Context, id, userId string) (*fs.Metadata, e
 	}
 
 	return &fs.Metadata{
-		Id:            f.ID,
-		FileName:      f.FileName,
-		ThumbnailName: f.ThumbName.String,
-		UserId:        f.UserID,
+		Id:        f.ID,
+		Filename:  f.FileName,
+		Thumbname: f.ThumbName.String,
+		UserId:    f.UserID,
 	}, nil
 }
 

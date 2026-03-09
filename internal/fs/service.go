@@ -3,143 +3,182 @@ package fs
 import (
 	"bytes"
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
+	"strings"
 	"time"
 
 	_ "image/gif"
 	_ "image/png"
 
 	"github.com/google/uuid"
-	"github.com/portbound/go-fs/internal/user"
+	"golang.org/x/sync/errgroup"
 )
 
 type Service struct {
-	meta   MetaStore
-	blob   BlobStore
-	tmpDir string
+	meta MetaStore
+	blob BlobStore
 }
-
-var (
-	ErrFileExists       = errors.New("file already exists")
-	ErrOrphanedFile     = errors.New("CRITICAL - orphaned file")
-	ErrMetaNotFound     = errors.New("")
-	ErrBlobNotFound     = errors.New("file not found in storage")
-	ErrUserUnauthorzied = errors.New("user ")
-)
 
 func NewService(m MetaStore, b BlobStore, dir string) *Service {
-	return &Service{meta: m, blob: b, tmpDir: dir}
+	return &Service{meta: m, blob: b}
 }
 
-func (s *Service) Upload(ctx context.Context, reader io.Reader, name, contentType string, owner *user.User) error {
-	dbReadCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
-	defer cancel()
+func (s *Service) Upload(ctx context.Context, requests <-chan UploadRequest) <-chan UploadResult {
+	results := make(chan UploadResult)
 
-	_, err := s.meta.Get(dbReadCtx, name, owner.Id)
-	if err == nil {
-		return ErrFileExists
-	}
-	if !errors.Is(err, sql.ErrNoRows) {
-		return err
-	}
+	go func() {
+		for request := range requests {
+			fileType := strings.Split(request.contentType, "/")[0]
+			if fileType != "image" && fileType != "video" {
+				results <- UploadResult{
+					filename: request.filename,
+					err:      ErrUnsupportedFileType,
+				}
+				continue
+			}
 
-	meta := Metadata{
-		Id:            uuid.New().String(),
-		FileName:      name,
-		ThumbnailName: "thumb-" + name,
-		ContentType:   contentType,
-		UserId:        owner.Id,
-	}
+			dbReadCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+			defer cancel()
+			if _, err := s.meta.Get(dbReadCtx, request.filename, request.userId); err == nil {
+				results <- UploadResult{
+					filename: request.filename,
+					err:      ErrFileExists,
+				}
+				continue
+			}
 
-	dbWriteCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
-	defer cancel()
-	if err := s.meta.Save(dbWriteCtx, &meta); err != nil {
-		return fmt.Errorf("save metadata: %w", err)
-	}
+			meta := Metadata{
+				Id:        uuid.New().String(),
+				Filename:  request.filename,
+				Thumbname: "thumb-" + request.filename,
+				UserId:    request.userId,
+			}
 
-	size, timestamp, err := s.blob.Upload(ctx, meta.FileName, owner.Bucket, reader)
-	if err != nil {
-		return fmt.Errorf("upload %q: %w", meta.FileName, err)
-	}
-	meta.Size = size
-	meta.Timestamp = timestamp
+			err := func() error {
+				f, err := stageFile(ctx, meta.Filename, request.reader)
+				if err != nil {
+					return fmt.Errorf("stage file to disk: %w", err)
+				}
+				defer f.Close()
+				defer os.Remove(f.Name())
 
-	thumbReader, err := generateThumbnail(ctx, s.tmpDir)
-	if err != nil {
-		return fmt.Errorf("generate thumbnail: %w", err)
-	}
+				thumbReader, err := generateThumbnail(ctx, f.Name())
+				if err != nil {
+					return fmt.Errorf("generate thumbnail: %w", err)
+				}
 
-	_, _, err = s.blob.Upload(ctx, meta.ThumbnailName, owner.Bucket, thumbReader)
-	if err != nil {
-		return fmt.Errorf("upload thumbnail %q: %w", meta.ThumbnailName, err)
-	}
+				g, ctx := errgroup.WithContext(ctx)
+				g.Go(func() error {
+					return s.blob.Upload(ctx, meta.Filename, request.bucket, f)
+				})
 
-	dbWriteCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
-	defer cancel()
-	if err := s.meta.Save(dbWriteCtx, &meta); err != nil {
-		saveErr := errors.Join(err)
-		if err := s.blob.Delete(ctx, meta.FileName, owner.Bucket); err != nil {
-			saveErr = errors.Join(fmt.Errorf("%v: delete %q: %w", ErrOrphanedFile, meta.FileName, err))
+				g.Go(func() error {
+					return s.blob.Upload(ctx, meta.Thumbname, request.bucket, thumbReader)
+				})
+
+				return g.Wait()
+			}()
+
+			if err != nil {
+				results <- UploadResult{
+					filename: request.filename,
+					err:      err,
+				}
+				continue
+			}
+
+			dbWriteCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+			defer cancel()
+			if err := s.meta.Save(dbWriteCtx, &meta); err != nil {
+				results <- UploadResult{
+					filename: request.filename,
+					err:      fmt.Errorf("save metadata: %w", err),
+				}
+				continue
+			}
+
+			results <- UploadResult{
+				filename: request.filename,
+				err:      nil,
+			}
 		}
+	}()
 
-		if err := s.blob.Delete(ctx, meta.ThumbnailName, owner.Bucket); err != nil {
-			saveErr = errors.Join(fmt.Errorf("%v: delete %q: %w", ErrOrphanedFile, meta.ThumbnailName, err))
-		}
-
-		return fmt.Errorf("save file metadata: %w", saveErr)
-	}
-
-	return nil
+	return results
 }
 
-func (s *Service) Download(ctx context.Context, id string, owner *user.User) (string, io.ReadCloser, error) {
+func (s *Service) Download(ctx context.Context, request DownloadRequest) (*DownloadResult, error) {
 	dbCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
 
-	metadata, err := s.meta.Get(dbCtx, id, owner.Id)
+	metadata, err := s.meta.Get(dbCtx, request.filename, request.userId)
 	if err != nil {
-		return "", nil, fmt.Errorf("get: %w", err)
+		return nil, fmt.Errorf("get metadata: %w", err)
 	}
 
-	if metadata.UserId != owner.Id {
-		return "", nil, errors.New("user %q unauthorized")
+	if metadata.UserId != request.userId {
+		return nil, errors.New("unauthorized request")
 	}
 
-	gcsReader, err := s.blob.Download(ctx, id, owner.Bucket)
+	attrs, reader, err := s.blob.Download(ctx, request.filename, request.bucket)
 	if err != nil {
-		if errors.Is(err, ErrBlobNotFound) {
+		if errors.Is(err, ErrBlobNotExist) {
 			dbCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 			defer cancel()
 
-			if err := s.meta.Delete(dbCtx, id, owner.Id); err != nil {
-				return "", nil, fmt.Errorf("delete: %w")
+			if err := s.meta.Delete(dbCtx, request.filename, request.userId); err != nil {
+				return nil, fmt.Errorf("delete metadata for orphaned object: %w")
 			}
-
 		}
-		return "", nil, err
+
+		return nil, fmt.Errorf("download blob %q: %w", request.filename, err)
 	}
 
-	return metadata.ContentType, gcsReader, nil
+	return &DownloadResult{
+		reader:      reader,
+		contentType: attrs.ContentType,
+		size:        attrs.Size,
+		timestamp:   attrs.Created,
+	}, nil
 }
 
-func (s *Service) Delete(ctx context.Context, id string, owner *user.User) error {
-	if err := s.blob.Delete(ctx, id, owner.Bucket); err != nil {
-		return fmt.Errorf("delete: %w")
+func (s *Service) Delete(ctx context.Context, request DeleteRequest) error {
+	if err := s.blob.Delete(ctx, request.filename, request.bucket); err != nil {
+		return fmt.Errorf("delete blob: %w", err)
 	}
 
-	if err := s.meta.Delete(ctx, id, owner.Id); err != nil {
-		deleteErr := errors.Join(err)
-		return fmt.Errorf("delete: %w", err)
+	if err := s.meta.Delete(ctx, request.filename, request.userId); err != nil {
+		return fmt.Errorf("delete metadata: %w", err)
 	}
 
 	return nil
 }
 
-func generateThumbnail(ctx context.Context, path string) (io.Reader, error) {
+func stageFile(ctx context.Context, name string, r io.Reader) (*os.File, error) {
+	f, err := os.CreateTemp("", name)
+	if err != nil {
+		return nil, fmt.Errorf("create temp file: %w", err)
+	}
+
+	_, err = io.Copy(f, r)
+	if err != nil {
+		return nil, fmt.Errorf("copy to temp file: %w", err)
+	}
+
+	if _, err := f.Seek(0, 0); err != nil {
+		f.Close()
+		os.Remove(f.Name())
+		return nil, fmt.Errorf("seek to start: %w", err)
+	}
+
+	return f, nil
+}
+
+func generateThumbnail(ctx context.Context, path string) (*bytes.Buffer, error) {
 	args := []string{
 		"-i", path,
 		"-vf", "scale=150:150:force_original_aspect_ratio=increase,crop=150:150",

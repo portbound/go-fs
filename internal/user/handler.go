@@ -70,7 +70,7 @@ func (h *Handler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err = h.userService.Get(r.Context(), requesterEmail)
+	_, err = h.service.Get(r.Context(), requesterEmail)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			logger.Error("unauthorized login attempt", "error", err, "requester", requesterEmail)
