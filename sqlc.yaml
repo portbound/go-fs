@@ -1,12 +1,12 @@
 version: "2"
 sql: 
   - engine: "sqlite"
-    schema: "internal/infrastructure/database/sqlite/schema.sql"
-    queries: "internal/infrastructure/database/sqlite/query.sql"
+    schema: "internal/platform/database/sqlite/schema.sql"
+    queries: "internal/platform/database/sqlite/query.sql"
     gen: 
       go:
         package: "sqlite"
-        out: "internal/infrastructure/database/sqlite"
+        out: "internal/platform/database/sqlite"
         sql_package: "database/sql"
         emit_json_tags: true
         emit_prepared_queries: true

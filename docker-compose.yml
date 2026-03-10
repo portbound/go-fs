@@ -1,6 +1,6 @@
 services:
   gofs: 
-    image: portbound/projects:gofs
+    image: portbound/gofs
     env_file: .env
 
     volumes:

@@ -9,7 +9,7 @@ type LoggingMiddleware struct {
 	logger *slog.Logger
 }
 
-func NewLoggingMiddleware(logger *slog.Logger) *LoggingMiddleware {
+func New(logger *slog.Logger) *LoggingMiddleware {
 	return &LoggingMiddleware{logger: logger}
 }
 

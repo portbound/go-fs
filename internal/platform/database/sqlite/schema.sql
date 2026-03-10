@@ -1,0 +1,13 @@
+CREATE TABLE IF NOT EXISTS users (
+		id TEXT NOT NULL PRIMARY KEY,
+		email TEXT NOT NULL UNIQUE,
+		bucket_name TEXT NOT NULL UNIQUE
+);
+
+CREATE TABLE IF NOT EXISTS metadata (
+		id TEXT NOT NULL PRIMARY KEY, 
+		file_name TEXT NOT NULL, 
+		thumb_name TEXT NOT NULL,
+		user_id TEXT NOT NULL,
+		UNIQUE (name, owner)
+);

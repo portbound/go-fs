@@ -1,6 +1,6 @@
 module github.com/portbound/go-fs
 
-go 1.25
+go 1.26
 
 require (
 	cloud.google.com/go/storage v1.55.0
