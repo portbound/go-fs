@@ -31,5 +31,6 @@ go.work.sum
 GEMINI.md
 
 # misc
-local/
-samples/
+gcp-creds.json
+data/
+logs/
