@@ -37,45 +37,6 @@ Go-FS is built with a an unorthodox stack. I feel like people always say that HT
 *   **[Alpine.js](https://alpinejs.dev/)** - A rugged, minimal framework for composing JavaScript behavior in your markup.
 *   **[Tailwind CSS](https://tailwindcss.com/)** - A utility-first CSS framework for rapid UI development.
 
-## Getting Started
-
-To get a local copy up and running, I recommed using docker. 
-
-*Authentication is disabled when the env variable ENVIRONMENT is set to "development".*
-
-As a disclaimer, this does require some knowledge and familiarity with GCS. I planned on supporting other providers but that was sort of a "because I can" and not a "because I need to" kind of thing. I may get around to it, but for now, spinning up a session running Go-FS does require a service account to work. 
-
-More on that here: https://cloud.google.com/iam/docs/service-accounts-create
-
-### Prerequisites
-
-*   Go 1.25 or later
-*   A Google Cloud Platform account
-
-### Installation
-
-1.  **Pull down the image**
-    ```sh
-    $ docker pull portbound/projects:gofs
-    ```
-2.  **Set up environment**
-    ```sh
-    $ mkdir -p ~/app/local/{data,logs,secrets,tmp}
-    ```
-3. **Add GCS Service Account Key to `~/app/local/secrets`**    
-4. **Ensure that `/data` is owned by your user**
-    ```sh
-    $ sudo chown -R $(whoami):$(whoami) ~/app/local/data
-    ```
-    *Sqlite will write to this directory, and if it's owned by root, it will complain.*
-5. **Run the container**
-   ```sh
-   $ docker compose up -d 
-   ```
-   
-The application will be available at `http://localhost:8080`.
-
-
 ## License
 
 Distributed under the MIT License. See `LICENSE` for more information.
