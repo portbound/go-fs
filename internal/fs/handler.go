@@ -12,8 +12,8 @@ import (
 	"path/filepath"
 
 	"github.com/portbound/go-fs/internal/middleware"
+	"github.com/portbound/go-fs/internal/platform/http/response"
 	"github.com/portbound/go-fs/internal/user"
-	"github.com/portbound/go-fs/pkg/response"
 	"github.com/portbound/portlog"
 )
 
@@ -36,7 +36,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 func (h *Handler) handleUploadFile(w http.ResponseWriter, r *http.Request) {
 	_, params, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
 	if err != nil {
-		response.WriteJSONError(w, http.StatusBadRequest, err.Error())
+		response.Error(w, http.StatusBadRequest, err)
 		return
 	}
 
@@ -53,7 +53,7 @@ func (h *Handler) handleUploadFile(w http.ResponseWriter, r *http.Request) {
 			}
 			msg := "failed to parse incoming multipart request"
 			h.logger.Error(msg, err)
-			response.WriteJSONError(w, http.StatusInternalServerError, errors.New(msg))
+			response.Error(w, http.StatusInternalServerError, errors.New(msg))
 			return
 		}
 
@@ -74,17 +74,17 @@ func (h *Handler) handleUploadFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if resultErrs != nil {
-		response.WriteJSON(w, http.StatusMultiStatus, resultErrs.Error())
+		response.JSON(w, http.StatusMultiStatus, resultErrs.Error())
 		return
 	}
 
-	response.WriteJSON(w, http.StatusCreated, nil)
+	response.JSON(w, http.StatusCreated, nil)
 }
 
 func (h *Handler) handleDownloadFile(w http.ResponseWriter, r *http.Request) {
 	fileId := r.PathValue("id")
 	if fileId == "" {
-		response.WriteJSONError(w, http.StatusBadRequest, "file id missing from request")
+		response.Error(w, http.StatusBadRequest, errors.New("file id missing from request"))
 		return
 	}
 
@@ -98,18 +98,18 @@ func (h *Handler) handleDownloadFile(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			h.logger.Error("file not found during download", err, "fileId", fileId, "userId", requester.Id)
-			response.WriteJSONError(w, http.StatusNotFound, fmt.Errorf("file not found for id: %q", fileId))
+			response.Error(w, http.StatusNotFound, fmt.Errorf("file not found for id: %q", fileId))
 			return
 		}
 
 		if errors.Is(err, ErrMediaCorrupted) {
 			h.logger.Error("orphaned data needs cleanup", err, "fileId", fileId)
-			response.WriteJSONError(w, http.StatusInternalServerError, fmt.Errorf("%v: %q", err.Error(), fileId))
+			response.Error(w, http.StatusInternalServerError, fmt.Errorf("%v: %q", err.Error(), fileId))
 			return
 		}
 
-		response.WriteJSONError(w, http.StatusBadRequest, err.Error())
 		h.logger.Error("failed to download file", err, "fileId", fileId)
+		response.Error(w, http.StatusBadRequest, err)
 		return
 	}
 	defer result.Reader.Close()
@@ -119,7 +119,7 @@ func (h *Handler) handleDownloadFile(w http.ResponseWriter, r *http.Request) {
 
 	if _, err := io.Copy(w, result.Reader); err != nil {
 		h.logger.Error("failed to stream file to client", err, "fileId", fileId)
-		response.WriteJSONError(w, http.StatusInternalServerError, fmt.Errorf("failed to download file for id: '%s'", fileId))
+		response.Error(w, http.StatusInternalServerError, fmt.Errorf("failed to download file for id: '%s'", fileId))
 	}
 }
 
@@ -127,17 +127,17 @@ func (h *Handler) handleGetMetadata(w http.ResponseWriter, r *http.Request) {
 	metadata, err := h.fs.GetMetadata(r.Context(), requester.Id)
 	if err != nil {
 		h.logger.Error("failed to retrieve metadata", err, "userId", requester.Id)
-		response.WriteJSONError(w, http.StatusInternalServerError, fmt.Errorf("failed to fetch metadata for user %q", requester.Id))
+		response.Error(w, http.StatusInternalServerError, fmt.Errorf("failed to fetch metadata for user %q", requester.Id))
 		return
 	}
 
-	response.WriteJSON(w, http.StatusOK, metadata)
+	response.JSON(w, http.StatusOK, metadata)
 }
 
 func (h *Handler) handleDeleteFile(w http.ResponseWriter, r *http.Request) {
 	fileId := r.PathValue("id")
 	if fileId == "" {
-		response.WriteJSONError(w, http.StatusBadRequest, "file id missing from request")
+		response.Error(w, http.StatusBadRequest, errors.New("file id missing from request"))
 		return
 	}
 
@@ -149,7 +149,7 @@ func (h *Handler) handleDeleteFile(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.fs.Delete(r.Context(), request); err != nil {
 		h.logger.Error("failed to delete file", err, "fileId", fileId, "userId", requester.Id)
-		response.WriteJSONError(w, http.StatusInternalServerError, fmt.Errorf("failed to delete file %q", request.FileId))
+		response.Error(w, http.StatusInternalServerError, fmt.Errorf("failed to delete file %q", request.FileId))
 		return
 	}
 }

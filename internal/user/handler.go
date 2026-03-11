@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/portbound/go-fs/pkg/auth"
-	"github.com/portbound/go-fs/pkg/response"
+	 "github.com/portbound/go-fs/internal/platform/http/response"
 	"github.com/portbound/portlog"
 )
 
@@ -51,21 +51,21 @@ func (h *Handler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.Method != "POST" {
-		response.WriteJSON(w, http.StatusMethodNotAllowed, fmt.Sprintf("Method not allowed: %s", r.Method))
+		response.JSON(w, http.StatusMethodNotAllowed, fmt.Sprintf("Method not allowed: %s", r.Method))
 		return
 	}
 
 	var req LoginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		h.logger.Error("decode request data", err)
-		response.WriteJSONError(w, http.StatusInternalServerError, ErrFailedLogin)
+		response.Error(w, http.StatusInternalServerError, ErrFailedLogin)
 		return
 	}
 
 	requesterEmail, err := h.authenticator.ValidateOAuth(req.Token)
 	if err != nil {
 		h.logger.Error("oAuth validation", err)
-		response.WriteJSONError(w, http.StatusInternalServerError, ErrFailedLogin)
+		response.Error(w, http.StatusInternalServerError, ErrFailedLogin)
 		return
 	}
 
@@ -73,11 +73,11 @@ func (h *Handler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			h.logger.Error("unauthorized login attempt", err, "requester", requesterEmail)
-			response.WriteJSONError(w, http.StatusForbidden, fmt.Errorf("permission denied for user: '%s'", requesterEmail))
+			response.Error(w, http.StatusForbidden, fmt.Errorf("permission denied for user: '%s'", requesterEmail))
 			return
 		}
 		h.logger.Error("user lookup", err)
-		response.WriteJSONError(w, http.StatusInternalServerError, ErrFailedLogin)
+		response.Error(w, http.StatusInternalServerError, ErrFailedLogin)
 		return
 	}
 
@@ -85,12 +85,12 @@ func (h *Handler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	jwt, err := h.authenticator.GenerateJWT(expirationDate, requesterEmail)
 	if err != nil {
 		h.logger.Error("failed to provision JWT", err, "requester", requesterEmail)
-		response.WriteJSONError(w, http.StatusInternalServerError, ErrFailedLogin)
+		response.Error(w, http.StatusInternalServerError, ErrFailedLogin)
 		return
 	}
 
 	cookie := h.authenticator.GenerateCookie(expirationDate, jwt)
 	http.SetCookie(w, cookie)
 
-	response.WriteJSON(w, http.StatusOK, LoginResponse{JWT: jwt})
+	response.JSON(w, http.StatusOK, LoginResponse{JWT: jwt})
 }
