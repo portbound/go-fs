@@ -1,5 +1,5 @@
 # Build stage
-FROM golang:1.25-alpine AS builder
+FROM golang:1.26-alpine AS builder
 
 RUN apk update && apk add --no-cache build-base
 
@@ -16,7 +16,7 @@ RUN go build -a -ldflags="-w -s" -o /app/server ./cmd/server
 # Final 
 FROM alpine:latest
 
-RUN apk update && apk add --no-cache ffmpeg 
+RUN apk update && apk add --no-cache ffmpeg sqlite
 
 WORKDIR /app
 
