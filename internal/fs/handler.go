@@ -14,15 +14,16 @@ import (
 	"github.com/portbound/go-fs/internal/middleware"
 	"github.com/portbound/go-fs/internal/user"
 	"github.com/portbound/go-fs/pkg/response"
+	"github.com/portbound/portlog"
 )
 
 type Handler struct {
 	fs     *Service
-	logger *slog.Logger
+	logger *portlog.PortLog
 }
 
-func NewHandler(f *Service, logger *slog.Logger) *Handler {
-	return &Handler{fs: f, logger: logger}
+func NewHandler(f *Service, l *portlog.PortLog) *Handler {
+	return &Handler{fs: f, logger: l}
 }
 
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
@@ -33,16 +34,6 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 }
 
 func (h *Handler) handleUploadFile(w http.ResponseWriter, r *http.Request) {
-	logger := h.logger.With("handler", "handleUploadFile")
-	requester, ok := r.Context().Value(middleware.RequesterKey).(*user.User)
-	if !ok {
-		// TODO: log
-		// unauthorized, user not found in context
-		response.WriteJSONError(w, http.StatusUnauthorized, "unauthorized: user is missing from request")
-		return
-	}
-	logger = logger.With("requester", requester.Email)
-
 	_, params, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
 	if err != nil {
 		response.WriteJSONError(w, http.StatusBadRequest, err.Error())
@@ -60,9 +51,9 @@ func (h *Handler) handleUploadFile(w http.ResponseWriter, r *http.Request) {
 				close(requests)
 				break
 			}
-			// TODO: log
-			// failed to parse incoming request
-			response.WriteJSONError(w, http.StatusInternalServerError, "request failed")
+			msg := "failed to parse incoming multipart request"
+			h.logger.Error(msg, err)
+			response.WriteJSONError(w, http.StatusInternalServerError, errors.New(msg))
 			return
 		}
 
@@ -91,15 +82,6 @@ func (h *Handler) handleUploadFile(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handleDownloadFile(w http.ResponseWriter, r *http.Request) {
-	logger := h.logger.With("handler", "handleDownloadFile")
-	requester, ok := r.Context().Value(middleware.RequesterKey).(*user.User)
-	if !ok {
-		logger.Warn("unauthorized request: user not found in context")
-		response.WriteJSONError(w, http.StatusUnauthorized, "unauthorized: user is missing from request")
-		return
-	}
-	logger = logger.With("requester", requester.Email)
-
 	fileId := r.PathValue("id")
 	if fileId == "" {
 		response.WriteJSONError(w, http.StatusBadRequest, "file id missing from request")
@@ -115,19 +97,19 @@ func (h *Handler) handleDownloadFile(w http.ResponseWriter, r *http.Request) {
 	result, err := h.fs.Download(r.Context(), request)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			// TODO: log error
-			response.WriteJSONError(w, http.StatusNotFound, fmt.Sprintf("file not found for id: %q", fileId))
+			h.logger.Error("file not found during download", err, "fileId", fileId, "userId", requester.Id)
+			response.WriteJSONError(w, http.StatusNotFound, fmt.Errorf("file not found for id: %q", fileId))
 			return
 		}
 
 		if errors.Is(err, ErrMediaCorrupted) {
-			// TODO: log error
-			// orphaned data needs cleanup
-			response.WriteJSONError(w, http.StatusInternalServerError, fmt.Sprintf("%v: %q", err.Error(), fileId))
+			h.logger.Error("orphaned data needs cleanup", err, "fileId", fileId)
+			response.WriteJSONError(w, http.StatusInternalServerError, fmt.Errorf("%v: %q", err.Error(), fileId))
 			return
 		}
 
 		response.WriteJSONError(w, http.StatusBadRequest, err.Error())
+		h.logger.Error("failed to download file", err, "fileId", fileId)
 		return
 	}
 	defer result.Reader.Close()
@@ -136,27 +118,16 @@ func (h *Handler) handleDownloadFile(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 
 	if _, err := io.Copy(w, result.Reader); err != nil {
-		// TODO: log err
-		// failed to stream file to client
-		response.WriteJSONError(w, http.StatusInternalServerError, fmt.Sprintf("failed to download file for id: '%s'", fileId))
+		h.logger.Error("failed to stream file to client", err, "fileId", fileId)
+		response.WriteJSONError(w, http.StatusInternalServerError, fmt.Errorf("failed to download file for id: '%s'", fileId))
 	}
 }
 
 func (h *Handler) handleGetMetadata(w http.ResponseWriter, r *http.Request) {
-	logger := h.logger.With("handler", "handleFetchFileMeta")
-	requester, ok := r.Context().Value(middleware.RequesterKey).(*user.User)
-	if !ok {
-		logger.Warn("unauthorized request: user not found in context")
-		response.WriteJSONError(w, http.StatusUnauthorized, "unauthorized: user is missing from request")
-		return
-	}
-	logger = logger.With("requester", requester.Email)
-
 	metadata, err := h.fs.GetMetadata(r.Context(), requester.Id)
 	if err != nil {
-		// TODO: log err
-		// failed to retrieve metadata for requester
-		response.WriteJSONError(w, http.StatusInternalServerError, fmt.Sprintf("failed to fetch metadata for user %q", requester.Id))
+		h.logger.Error("failed to retrieve metadata", err, "userId", requester.Id)
+		response.WriteJSONError(w, http.StatusInternalServerError, fmt.Errorf("failed to fetch metadata for user %q", requester.Id))
 		return
 	}
 
@@ -164,15 +135,6 @@ func (h *Handler) handleGetMetadata(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handleDeleteFile(w http.ResponseWriter, r *http.Request) {
-	logger := h.logger.With("handler", "handleDeleteFile")
-	requester, ok := r.Context().Value(middleware.RequesterKey).(*user.User)
-	if !ok {
-		logger.Info("unauthorized request: user not found in context")
-		response.WriteJSONError(w, http.StatusUnauthorized, "unauthorized: user is missing from request")
-		return
-	}
-	logger = logger.With("requester", requester.Email)
-
 	fileId := r.PathValue("id")
 	if fileId == "" {
 		response.WriteJSONError(w, http.StatusBadRequest, "file id missing from request")
@@ -186,9 +148,8 @@ func (h *Handler) handleDeleteFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.fs.Delete(r.Context(), request); err != nil {
-		// TODO: log error
-		// failed to delete file
-		response.WriteJSONError(w, http.StatusInternalServerError, fmt.Sprintf("failed to delete file %q", request.FileId))
+		h.logger.Error("failed to delete file", err, "fileId", fileId, "userId", requester.Id)
+		response.WriteJSONError(w, http.StatusInternalServerError, fmt.Errorf("failed to delete file %q", request.FileId))
 		return
 	}
 }

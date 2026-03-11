@@ -6,12 +6,12 @@ import (
 
 	"github.com/portbound/go-fs/internal/config"
 	"github.com/portbound/go-fs/internal/fs"
-	"github.com/portbound/go-fs/internal/logging"
 	"github.com/portbound/go-fs/internal/middleware"
 	"github.com/portbound/go-fs/internal/platform/database/sqlite"
 	"github.com/portbound/go-fs/internal/platform/storage/gcs"
 	"github.com/portbound/go-fs/internal/user"
 	"github.com/portbound/go-fs/pkg/auth"
+	"github.com/portbound/portlog"
 )
 
 func main() {
@@ -20,10 +20,11 @@ func main() {
 		log.Fatalf("failed to load config: %v", err)
 	}
 
-	logger, err := logging.New(cfg.LogDir)
+	logger, err := portlog.New()
 	if err != nil {
 		log.Fatalf("set up logging: %v", err)
 	}
+	defer logger.Close()
 
 	sqlite, err := sqlite.NewSQLiteDB(cfg.DBConnectionString)
 	if err != nil {
@@ -63,7 +64,7 @@ func main() {
 
 	server := http.Server{
 		Addr:    cfg.ServerPort,
-		Handler: loggingMW.LogRequest(userMux),
+		Handler: logger.Request(userMux),
 	}
 
 	log.Printf("starting server on port %s\n", cfg.ServerPort)

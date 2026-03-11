@@ -1,11 +1,12 @@
 module github.com/portbound/go-fs
 
-go 1.26
+go 1.26.1
 
 require (
 	cloud.google.com/go/storage v1.55.0
 	github.com/google/uuid v1.6.0
 	github.com/mattn/go-sqlite3 v1.14.28
+	github.com/portbound/portlog v0.0.0-20260311154148-e184144aeed5
 )
 
 require github.com/kelseyhightower/envconfig v1.4.0 // direct
@@ -49,7 +50,7 @@ require (
 	golang.org/x/crypto v0.40.0 // indirect
 	golang.org/x/net v0.42.0 // indirect
 	golang.org/x/oauth2 v0.30.0 // indirect
-	golang.org/x/sync v0.16.0 // indirect
+	golang.org/x/sync v0.16.0
 	golang.org/x/text v0.27.0 // indirect
 	golang.org/x/time v0.11.0 // indirect
 	google.golang.org/api v0.235.0 // direct

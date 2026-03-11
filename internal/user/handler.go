@@ -11,6 +11,7 @@ import (
 
 	"github.com/portbound/go-fs/pkg/auth"
 	"github.com/portbound/go-fs/pkg/response"
+	"github.com/portbound/portlog"
 )
 
 type LoginRequest struct {
@@ -23,12 +24,12 @@ type LoginResponse struct {
 
 type Handler struct {
 	service       *Service
-	authenticator *auth.Authenticator
-	logger        *slog.Logger
+	authenticator Authenticator
+	logger        *portlog.PortLog
 }
 
-func NewHandler(a *auth.Authenticator, s *Service, logger *slog.Logger) *Handler {
-	return &Handler{authenticator: a, service: s, logger: logger}
+func NewHandler(a Authenticator, s *Service, l *portlog.PortLog) *Handler {
+	return &Handler{authenticator: a, service: s, logger: l}
 }
 
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
@@ -40,8 +41,6 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 }
 
 func (h *Handler) HandleLogin(w http.ResponseWriter, r *http.Request) {
-	logger := h.logger.With("handler", "handleLogin")
-
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
@@ -58,34 +57,35 @@ func (h *Handler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 
 	var req LoginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		logger.Error("failed to decode request data", "error", err)
-		response.WriteJSONError(w, http.StatusInternalServerError, "login attempt failed")
+		h.logger.Error("decode request data", err)
+		response.WriteJSONError(w, http.StatusInternalServerError, ErrFailedLogin)
 		return
 	}
 
 	requesterEmail, err := h.authenticator.ValidateOAuth(req.Token)
 	if err != nil {
-		logger.Error("oAuth validation failed", "error", err)
-		response.WriteJSONError(w, http.StatusInternalServerError, "login attempt failed")
+		h.logger.Error("oAuth validation", err)
+		response.WriteJSONError(w, http.StatusInternalServerError, ErrFailedLogin)
 		return
 	}
 
 	_, err = h.service.Get(r.Context(), requesterEmail)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			logger.Error("unauthorized login attempt", "error", err, "requester", requesterEmail)
-			response.WriteJSONError(w, http.StatusForbidden, fmt.Sprintf("permission denied for user: '%s'", requesterEmail))
+			h.logger.Error("unauthorized login attempt", err, "requester", requesterEmail)
+			response.WriteJSONError(w, http.StatusForbidden, fmt.Errorf("permission denied for user: '%s'", requesterEmail))
+			return
 		}
-		logger.Error("user lookup failed", "error", err)
-		response.WriteJSONError(w, http.StatusInternalServerError, "login attempt failed")
+		h.logger.Error("user lookup", err)
+		response.WriteJSONError(w, http.StatusInternalServerError, ErrFailedLogin)
 		return
 	}
 
 	expirationDate := time.Now().UTC().AddDate(0, 30, 0)
 	jwt, err := h.authenticator.GenerateJWT(expirationDate, requesterEmail)
 	if err != nil {
-		logger.Error("failed to provision JWT", "error", err, "requester", requesterEmail)
-		response.WriteJSONError(w, http.StatusInternalServerError, "login attempt failed")
+		h.logger.Error("failed to provision JWT", err, "requester", requesterEmail)
+		response.WriteJSONError(w, http.StatusInternalServerError, ErrFailedLogin)
 		return
 	}
 
