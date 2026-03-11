@@ -9,5 +9,5 @@ CREATE TABLE IF NOT EXISTS metadata (
 		file_name TEXT NOT NULL, 
 		thumb_name TEXT NOT NULL,
 		user_id TEXT NOT NULL,
-		UNIQUE (name, owner)
+		UNIQUE (file_name, user_id)
 );
