@@ -25,15 +25,15 @@ func main() {
 		log.Fatalf("set up logging: %v", err)
 	}
 
-	sqlite, err := sqlite.NewSQLiteDB(cfg.DBConnStr)
+	sqlite, err := sqlite.NewSQLiteDB(cfg.DBConnectionString)
 	if err != nil {
-		log.Fatalf("main.setupDB failed: %v", err)
+		log.Fatalf("set up database: %v", err)
 	}
 	defer sqlite.Conn.Close()
 
-	gcs, err := gcs.New(cfg.ProjectId)
+	gcs, err := gcs.New(cfg.GCSProjectId)
 	if err != nil {
-		log.Fatalf("main.setupStorage failed: %v", err)
+		log.Fatalf("set up storage: %v", err)
 	}
 
 	authenticator := auth.NewAuthenticator(cfg.JWTSecret, cfg.GoogleClientID, cfg.Environment)
