@@ -5,25 +5,24 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log/slog"
 	"mime"
 	"mime/multipart"
 	"net/http"
 	"path/filepath"
 
-	"github.com/portbound/go-fs/internal/middleware"
+	"github.com/portbound/go-fs/internal/auth"
 	"github.com/portbound/go-fs/internal/platform/http/response"
 	"github.com/portbound/go-fs/internal/user"
 	"github.com/portbound/portlog"
 )
 
 type Handler struct {
-	fs     *Service
-	logger *portlog.PortLog
+	service *Service
+	logger  *portlog.PortLog
 }
 
-func NewHandler(f *Service, l *portlog.PortLog) *Handler {
-	return &Handler{fs: f, logger: l}
+func NewHandler(s *Service, l *portlog.PortLog) *Handler {
+	return &Handler{service: s, logger: l}
 }
 
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
@@ -40,9 +39,10 @@ func (h *Handler) handleUploadFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	requester := r.Context().Value(auth.RequesterKey).(*user.User)
 	reader := multipart.NewReader(r.Body, params["boundary"])
 	requests := make(chan UploadRequest)
-	results := h.fs.Upload(r.Context(), requests)
+	results := h.service.Upload(r.Context(), requests)
 
 	for {
 		part, err := reader.NextPart()
@@ -88,13 +88,14 @@ func (h *Handler) handleDownloadFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	requester := r.Context().Value(auth.RequesterKey).(*user.User)
 	request := DownloadRequest{
 		FileId: fileId,
 		UserId: requester.Id,
 		Bucket: requester.Bucket,
 	}
 
-	result, err := h.fs.Download(r.Context(), request)
+	result, err := h.service.Download(r.Context(), request)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			h.logger.Error("file not found during download", err, "fileId", fileId, "userId", requester.Id)
@@ -124,7 +125,8 @@ func (h *Handler) handleDownloadFile(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handleGetMetadata(w http.ResponseWriter, r *http.Request) {
-	metadata, err := h.fs.GetMetadata(r.Context(), requester.Id)
+	requester := r.Context().Value(auth.RequesterKey).(*user.User)
+	metadata, err := h.service.GetMetadata(r.Context(), requester.Id)
 	if err != nil {
 		h.logger.Error("failed to retrieve metadata", err, "userId", requester.Id)
 		response.Error(w, http.StatusInternalServerError, fmt.Errorf("failed to fetch metadata for user %q", requester.Id))
@@ -141,13 +143,14 @@ func (h *Handler) handleDeleteFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	requester := r.Context().Value(auth.RequesterKey).(*user.User)
 	request := DeleteRequest{
 		FileId: fileId,
 		UserId: requester.Id,
 		Bucket: requester.Bucket,
 	}
 
-	if err := h.fs.Delete(r.Context(), request); err != nil {
+	if err := h.service.Delete(r.Context(), request); err != nil {
 		h.logger.Error("failed to delete file", err, "fileId", fileId, "userId", requester.Id)
 		response.Error(w, http.StatusInternalServerError, fmt.Errorf("failed to delete file %q", request.FileId))
 		return

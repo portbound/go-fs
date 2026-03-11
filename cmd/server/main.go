@@ -4,13 +4,12 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/portbound/go-fs/internal/auth"
 	"github.com/portbound/go-fs/internal/config"
 	"github.com/portbound/go-fs/internal/fs"
-	"github.com/portbound/go-fs/internal/middleware"
 	"github.com/portbound/go-fs/internal/platform/database/sqlite"
 	"github.com/portbound/go-fs/internal/platform/storage/gcs"
 	"github.com/portbound/go-fs/internal/user"
-	"github.com/portbound/go-fs/pkg/auth"
 	"github.com/portbound/portlog"
 )
 
@@ -37,34 +36,32 @@ func main() {
 		log.Fatalf("set up storage: %v", err)
 	}
 
-	authenticator := auth.NewAuthenticator(cfg.JWTSecret, cfg.GoogleClientID, cfg.Environment)
+	authenticator := auth.New(cfg.JWTSecret, cfg.GoogleClientID, cfg.Environment)
+	userProvider := user.NewService(sqlite)
+	authService := auth.NewService(authenticator, userProvider)
+	authHandler := auth.NewHandler(authService, logger)
 
-	userService := user.NewService(sqlite)
-	fsService := fs.NewService(sqlite, gcs, cfg.TmpDir)
+	fsService := fs.NewService(sqlite, gcs)
+	fsHandler := fs.NewHandler(fsService, logger)
 
-	userMux := http.NewServeMux()
-	userHandler := user.NewHandler(authenticator, userService, logger)
-	userHandler.RegisterRoutes(userMux)
+	authMux := http.NewServeMux()
+	authHandler.RegisterRoutes(authMux)
 
 	fsMux := http.NewServeMux()
-	fsHandler := fs.NewHandler(fsService, logger)
 	fsHandler.RegisterRoutes(fsMux)
-
-	authMW := middleware.NewAuthMiddleware(authenticator, userService)
-	loggingMW := middleware.New(logger)
 
 	switch cfg.Environment {
 	case "development":
-		userMux.Handle("/", http.FileServer(http.Dir("./web/public")))
-		userMux.Handle("/api/", http.StripPrefix("/api", fsMux))
+		authMux.Handle("/", http.FileServer(http.Dir("./web/public")))
+		authMux.Handle("/api/", http.StripPrefix("/api", fsMux))
 	default:
-		userMux.Handle("/", authMW.RequireWebAuth(http.FileServer(http.Dir("./web/public"))))
-		userMux.Handle("/api/", authMW.RequireAPIAuth(http.StripPrefix("/api", fsMux)))
+		authMux.Handle("/", authHandler.RequireWebAuth(http.FileServer(http.Dir("./web/public"))))
+		authMux.Handle("/api/", authHandler.RequireAPIAuth(http.StripPrefix("/api", fsMux)))
 	}
 
 	server := http.Server{
 		Addr:    cfg.ServerPort,
-		Handler: logger.Request(userMux),
+		Handler: logger.Request(authMux),
 	}
 
 	log.Printf("starting server on port %s\n", cfg.ServerPort)
