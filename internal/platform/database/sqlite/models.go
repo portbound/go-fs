@@ -12,7 +12,7 @@ type Metadata struct {
 }
 
 type User struct {
-	ID         string `json:"id"`
-	Email      string `json:"email"`
-	BucketName string `json:"bucket_name"`
+	ID     string `json:"id"`
+	Email  string `json:"email"`
+	Bucket string `json:"bucket"`
 }

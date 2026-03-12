@@ -82,14 +82,14 @@ func (q *Queries) GetMetadata(ctx context.Context, arg GetMetadataParams) (Metad
 }
 
 const getUser = `-- name: GetUser :one
-SELECT id, email, bucket_name FROM users 
+SELECT id, email, bucket FROM users 
 WHERE email = ? LIMIT 1
 `
 
 func (q *Queries) GetUser(ctx context.Context, email string) (User, error) {
 	row := q.queryRow(ctx, q.getUserStmt, getUser, email)
 	var i User
-	err := row.Scan(&i.ID, &i.Email, &i.BucketName)
+	err := row.Scan(&i.ID, &i.Email, &i.Bucket)
 	return i, err
 }
 

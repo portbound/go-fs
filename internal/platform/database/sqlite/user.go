@@ -15,6 +15,6 @@ func (db *SQLiteDB) GetUser(ctx context.Context, email string) (*user.User, erro
 	return &user.User{
 		Id:     data.ID,
 		Email:  data.Email,
-		Bucket: data.BucketName,
+		Bucket: data.Bucket,
 	}, nil
 }
