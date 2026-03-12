@@ -2,13 +2,11 @@ package auth
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"time"
 
 	"github.com/portbound/go-fs/internal/platform/http/response"
-	"github.com/portbound/go-fs/internal/user"
 	"github.com/portbound/portlog"
 )
 
@@ -17,7 +15,9 @@ type LoginRequest struct {
 }
 
 type LoginResponse struct {
-	JWT string `json:"jwt"`
+	Status  bool   `json:"status"`
+	Message string `json:"message"`
+	JWT     string `json:"jwt"`
 }
 
 type Handler struct {
@@ -61,11 +61,7 @@ func (h *Handler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 
 	jwt, expiration, err := h.service.authenticateLoginRequest(r.Context(), req)
 	if err != nil {
-		if errors.Is(err, user.ErrUserNotFound) {
-			response.Error(w, http.StatusInternalServerError, user.ErrUserNotFound)
-			return
-		}
-		response.Error(w, http.StatusInternalServerError, errors.New("login authentication failed"))
+		response.JSON(w, http.StatusInternalServerError, LoginResponse{Status: false, JWT: "", Message: "Access Denied"})
 		return
 	}
 
@@ -79,5 +75,5 @@ func (h *Handler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		SameSite: http.SameSiteLaxMode,
 	})
 
-	response.JSON(w, http.StatusOK, LoginResponse{JWT: jwt})
+	response.JSON(w, http.StatusOK, LoginResponse{Status: true, JWT: jwt, Message: ""})
 }
