@@ -23,26 +23,19 @@ document.addEventListener("alpine:init", () => {
 
 		// Initialization
 		init() {
-			if (!localStorage.getItem("jwt")) {
-				window.location.href = "/login.html";
-				return;
-			}
 			this.fetchFiles();
 		},
 
 		// API Fetch Wrapper
 		async authedFetch(url, options = {}) {
 			const token = localStorage.getItem("jwt");
-			if (!token) {
-				this.addToast("Authentication token not found. Redirecting to login.");
-				setTimeout(() => (window.location.href = "/login.html"), 2000);
-				return Promise.reject(new Error("Unauthorized"));
-			}
-
 			const headers = {
 				...options.headers,
-				Authorization: `Bearer ${token}`,
 			};
+
+			if (token) {
+				headers.Authorization = `Bearer ${token}`;
+			}
 
 			try {
 				const response = await fetch(`/api${url}`, { ...options, headers });
@@ -207,8 +200,8 @@ document.addEventListener("alpine:init", () => {
 				});
 
 				if (response.status === 201) {
-					const message = this.filesToUpload.length === 1 
-						? `"${this.filesToUpload[0].name}" uploaded successfully!` 
+					const message = this.filesToUpload.length === 1
+						? `"${this.filesToUpload[0].name}" uploaded successfully!`
 						: `${this.filesToUpload.length} files uploaded successfully!`;
 					this.addToast(message, "success");
 				} else if (response.status === 207) {
