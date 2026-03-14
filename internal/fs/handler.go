@@ -69,7 +69,7 @@ func (h *Handler) handleUploadFile(w http.ResponseWriter, r *http.Request) {
 	var resultErrs error
 	for result := range results {
 		if result.Err != nil {
-			resultErrs = errors.Join(resultErrs, err)
+			resultErrs = errors.Join(resultErrs, result.Err)
 		}
 	}
 
