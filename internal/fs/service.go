@@ -31,34 +31,30 @@ func (s *Service) Upload(ctx context.Context, requests <-chan UploadRequest) <-c
 	results := make(chan UploadResult)
 
 	go func() {
+		defer close(results)
+
 		for request := range requests {
-			fileType := strings.Split(request.ContentType, "/")[0]
-			if fileType != "image" && fileType != "video" {
-				results <- UploadResult{
-					Filename: request.Filename,
-					Err:      ErrUnsupportedFileType,
-				}
-				continue
-			}
-
-			dbReadCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
-			defer cancel()
-			if _, err := s.meta.Get(dbReadCtx, request.Filename, request.UserId); err == nil {
-				results <- UploadResult{
-					Filename: request.Filename,
-					Err:      ErrFileExists,
-				}
-				continue
-			}
-
-			meta := Metadata{
-				Id:        uuid.New().String(),
-				Filename:  request.Filename,
-				Thumbname: "thumb-" + request.Filename,
-				UserId:    request.UserId,
-			}
-
 			err := func() error {
+				defer request.Reader.Close()
+
+				fileType := strings.Split(request.ContentType, "/")[0]
+				if fileType != "image" && fileType != "video" {
+					return ErrUnsupportedFileType
+				}
+
+				dbReadCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+				defer cancel()
+				if _, err := s.meta.Get(dbReadCtx, request.Filename, request.UserId); err == nil {
+					return ErrFileExists
+				}
+
+				meta := Metadata{
+					Id:        uuid.New().String(),
+					Filename:  request.Filename,
+					Thumbname: "thumb-" + request.Filename,
+					UserId:    request.UserId,
+				}
+
 				f, err := stageFile(meta.Filename, request.Reader)
 				if err != nil {
 					return fmt.Errorf("stage file to disk: %w", err)
@@ -80,30 +76,22 @@ func (s *Service) Upload(ctx context.Context, requests <-chan UploadRequest) <-c
 					return s.media.Upload(ctx, meta.Thumbname, request.Bucket, thumbReader)
 				})
 
-				return g.Wait()
+				if err := g.Wait(); err != nil {
+					return err
+				}
+
+				dbWriteCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+				defer cancel()
+				if err := s.meta.Save(dbWriteCtx, &meta); err != nil {
+					return fmt.Errorf("save metadata: %w", err)
+				}
+
+				return nil
 			}()
-
-			if err != nil {
-				results <- UploadResult{
-					Filename: request.Filename,
-					Err:      err,
-				}
-				continue
-			}
-
-			dbWriteCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
-			defer cancel()
-			if err := s.meta.Save(dbWriteCtx, &meta); err != nil {
-				results <- UploadResult{
-					Filename: request.Filename,
-					Err:      fmt.Errorf("save metadata: %w", err),
-				}
-				continue
-			}
 
 			results <- UploadResult{
 				Filename: request.Filename,
-				Err:      nil,
+				Err:      err,
 			}
 		}
 	}()
@@ -163,12 +151,12 @@ func (s *Service) Delete(ctx context.Context, request DeleteRequest) error {
 func stageFile(name string, r io.Reader) (*os.File, error) {
 	f, err := os.CreateTemp("", name)
 	if err != nil {
-		return nil, fmt.Errorf("create temp file: %w", err)
+		return nil, err
 	}
 
 	_, err = io.Copy(f, r)
 	if err != nil {
-		return nil, fmt.Errorf("copy to temp file: %w", err)
+		return nil, fmt.Errorf("copy file: %w", err)
 	}
 
 	if _, err := f.Seek(0, 0); err != nil {

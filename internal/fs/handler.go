@@ -44,6 +44,9 @@ func (h *Handler) handleUploadFile(w http.ResponseWriter, r *http.Request) {
 	requests := make(chan UploadRequest)
 	results := h.service.Upload(r.Context(), requests)
 
+	defer close(requests)
+
+	var resultErrs error
 	for {
 		part, err := reader.NextPart()
 		if err != nil {
@@ -64,10 +67,8 @@ func (h *Handler) handleUploadFile(w http.ResponseWriter, r *http.Request) {
 			UserId:      requester.Id,
 			Bucket:      requester.Bucket,
 		}
-	}
 
-	var resultErrs error
-	for result := range results {
+		result := <-results
 		if result.Err != nil {
 			resultErrs = errors.Join(resultErrs, result.Err)
 		}
