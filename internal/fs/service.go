@@ -67,13 +67,13 @@ func (s *Service) Upload(ctx context.Context, requests <-chan UploadRequest) <-c
 					return fmt.Errorf("generate thumbnail: %w", err)
 				}
 
-				g, ctx := errgroup.WithContext(ctx)
+				g, groupCtx := errgroup.WithContext(ctx)
 				g.Go(func() error {
-					return s.media.Upload(ctx, meta.Filename, request.Bucket, f)
+					return s.media.Upload(groupCtx, meta.Filename, request.Bucket, f)
 				})
 
 				g.Go(func() error {
-					return s.media.Upload(ctx, meta.Thumbname, request.Bucket, thumbReader)
+					return s.media.Upload(groupCtx, meta.Thumbname, request.Bucket, thumbReader)
 				})
 
 				if err := g.Wait(); err != nil {
