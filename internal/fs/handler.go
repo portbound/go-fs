@@ -121,7 +121,6 @@ func (h *Handler) handleDownloadFile(w http.ResponseWriter, r *http.Request) {
 
 	if _, err := io.Copy(w, result.Reader); err != nil {
 		h.logger.Error("failed to stream file to client", err, "fileId", fileId)
-		response.Error(w, http.StatusInternalServerError, fmt.Errorf("failed to download file for id: '%s'", fileId))
 	}
 }
 
