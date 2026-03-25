@@ -18,6 +18,10 @@ FROM alpine:latest
 
 RUN apk update && apk add --no-cache ffmpeg sqlite
 
+RUN adduser -D -u 10001 appuser
+
+USER appuser
+
 WORKDIR /app
 
 COPY --from=builder /app/server ./
